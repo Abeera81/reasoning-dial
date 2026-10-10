@@ -1,8 +1,8 @@
 """Write tasks/*.py from task_template.py.txt with items and parser inlined (Tech Design §5).
 
 A Kaggle task is one pushed file, so everything it needs is inlined. The four
-dial files differ only in the LEVELS line and the @kbench.task(name=...) line;
-the name must be a string literal because `kaggle b t push` reads it with `ast`.
+dial files differ only in the LEVELS line and the two @kbench.task(name=...) lines
+(outer dial-<level>, inner dial-call-<level>); names must be string literals because `kaggle b t push` reads it with `ast`.
 
     PYTHONPATH=src python -m dial.build_tasks
 """
@@ -36,6 +36,7 @@ def _items_block(items) -> str:
 
 def render(*, name: str, description: str, levels: list[str], r: int,
            cache_probe: bool, items) -> str:
+    inner = name.replace("dial-", "dial-call-", 1)
     out = TEMPLATE.read_text(encoding="utf-8")
     subs = {
         "@@LEVELS@@": json.dumps(levels),
@@ -43,6 +44,7 @@ def render(*, name: str, description: str, levels: list[str], r: int,
         "@@CACHE_PROBE@@": str(cache_probe),
         "@@PARSER@@": PARSER.read_text(encoding="utf-8").rstrip() + "\n",
         "@@ITEMS@@": _items_block(items),
+        "@@INNER_DECORATOR@@": f"@kbench.task(name={json.dumps(inner)}, store_task=False, store_run=False)",
         "@@DECORATOR@@": f"@kbench.task(name={json.dumps(name)}, description={json.dumps(description)})",
     }
     for k, v in subs.items():

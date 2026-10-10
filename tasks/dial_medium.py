@@ -133,7 +133,7 @@ def _select_items():
     return ITEMS
 
 
-@kbench.task(name="dial-call", store_task=False, store_run=False)
+@kbench.task(name="dial-call-medium", store_task=False, store_run=False)
 def dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,
               answer: str, level: str, repeat: int, probe: int) -> dict:
     """One model call: prompt, parse, grade, and record usage."""

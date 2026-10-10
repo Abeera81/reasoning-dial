@@ -40,7 +40,7 @@ def test_files_written_and_parse():
         assert src.rstrip().endswith("dial_task.run(kbench.llm)")
 
 
-def test_dial_files_differ_only_in_level_and_name():
+def test_dial_files_differ_only_in_level_and_names():
     base = DIAL_FILES["none"].read_text(encoding="utf-8").splitlines()
     for lv, path in DIAL_FILES.items():
         other = path.read_text(encoding="utf-8").splitlines()
@@ -49,16 +49,20 @@ def test_dial_files_differ_only_in_level_and_name():
         if lv == "none":
             assert changed == []
             continue
-        assert len(changed) == 2, list(difflib.unified_diff(base, other, lineterm=""))
+        assert len(changed) == 3, list(difflib.unified_diff(base, other, lineterm=""))
         assert changed[0] == ('LEVELS = ["none"]', f'LEVELS = ["{lv}"]')
-        assert changed[1][0].startswith('@kbench.task(name="dial-none"')
-        assert changed[1][1] == changed[1][0].replace('"dial-none"', f'"dial-{lv}"')
+        assert changed[1][0].startswith('@kbench.task(name="dial-call-none"')
+        assert changed[1][1] == changed[1][0].replace('"dial-call-none"', f'"dial-call-{lv}"')
+        assert changed[2][0].startswith('@kbench.task(name="dial-none"')
+        assert changed[2][1] == changed[2][0].replace('"dial-none"', f'"dial-{lv}"')
 
 
 def test_task_names_match_push_slugs():
     for lv, path in DIAL_FILES.items():
-        assert task_names(path.read_text(encoding="utf-8")) == ["dial-call", f"dial-{lv}"]
-    assert task_names(CAL_FILE.read_text(encoding="utf-8")) == ["dial-call", "dial-calibration"]
+        assert task_names(path.read_text(encoding="utf-8")) == [f"dial-call-{lv}", f"dial-{lv}"]
+    assert task_names(CAL_FILE.read_text(encoding="utf-8")) == ["dial-call-calibration", "dial-calibration"]
+    all_names = [n for p in [*DIAL_FILES.values(), CAL_FILE] for n in task_names(p.read_text(encoding="utf-8"))]
+    assert len(all_names) == len(set(all_names))  # no collisions across files
 
 
 def test_parser_inlined_verbatim():
