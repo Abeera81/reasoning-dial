@@ -1,0 +1,430 @@
+[
+ {
+  "id": "deduce-000",
+  "family": "deduce",
+  "answer_type": "name",
+  "prompt": "Seven people, Ana, Ben, Cleo, Dev, Fay, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Dev gives the talk on an earlier day than Gus.\n2. Ana and Gus do not give their talks on consecutive days.\n3. Fay does not give the talk on Saturday.\n4. Ana gives the talk on the day immediately before Cleo.\n5. Hana gives the talk on an earlier day than Fay.\n6. Ben gives the talk on an earlier day than Hana.\n7. Dev gives the talk on the day immediately before Fay.\n\nQuestion: Who gives the talk on Friday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>",
+  "answer": "Ana",
+  "meta": {
+   "n_people": 7,
+   "n_clues": 7,
+   "clue_types": {
+    "before": 3,
+    "not_adjacent": 1,
+    "not_on": 1,
+    "immediately_before": 2
+   },
+   "people": [
+    "Ana",
+    "Ben",
+    "Cleo",
+    "Dev",
+    "Fay",
+    "Gus",
+    "Hana"
+   ],
+   "question_day": "Friday"
+  }
+ },
+ {
+  "id": "deduce-001",
+  "family": "deduce",
+  "answer_type": "name",
+  "prompt": "Seven people, Ana, Ben, Cleo, Dev, Eli, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Ben does not give the talk on Saturday.\n2. Hana gives the talk on an earlier day than Ben.\n3. Ana does not give the talk on Wednesday.\n4. Eli gives the talk on the day immediately before Ben.\n5. Cleo gives the talk on the day immediately before Hana.\n6. Dev gives the talk on an earlier day than Ana.\n7. Dev gives the talk on the day immediately before Gus.\n8. Dev gives the talk on an earlier day than Cleo.\n\nQuestion: Who gives the talk on Saturday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>",
+  "answer": "Eli",
+  "meta": {
+   "n_people": 7,
+   "n_clues": 8,
+   "clue_types": {
+    "not_on": 2,
+    "before": 3,
+    "immediately_before": 3
+   },
+   "people": [
+    "Ana",
+    "Ben",
+    "Cleo",
+    "Dev",
+    "Eli",
+    "Gus",
+    "Hana"
+   ],
+   "question_day": "Saturday"
+  }
+ },
+ {
+  "id": "deduce-002",
+  "family": "deduce",
+  "answer_type": "name",
+  "prompt": "Seven people, Ana, Cleo, Dev, Eli, Fay, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Gus gives the talk on the day immediately before Fay.\n2. Cleo and Ana do not give their talks on consecutive days.\n3. Hana gives the talk on the day immediately before Eli.\n4. Eli does not give the talk on Wednesday.\n5. Ana does not give the talk on Wednesday.\n6. Eli gives the talk on an earlier day than Dev.\n7. Ana gives the talk on the day immediately before Hana.\n\nQuestion: Who gives the talk on Wednesday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>",
+  "answer": "Fay",
+  "meta": {
+   "n_people": 7,
+   "n_clues": 7,
+   "clue_types": {
+    "immediately_before": 3,
+    "not_adjacent": 1,
+    "not_on": 2,
+    "before": 1
+   },
+   "people": [
+    "Ana",
+    "Cleo",
+    "Dev",
+    "Eli",
+    "Fay",
+    "Gus",
+    "Hana"
+   ],
+   "question_day": "Wednesday"
+  }
+ },
+ {
+  "id": "deduce-003",
+  "family": "deduce",
+  "answer_type": "name",
+  "prompt": "Seven people, Ana, Ben, Cleo, Dev, Eli, Fay and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Cleo gives the talk on an earlier day than Hana.\n2. Ben and Ana do not give their talks on consecutive days.\n3. Ben does not give the talk on Tuesday.\n4. Ben gives the talk on an earlier day than Cleo.\n5. Ana gives the talk on the day immediately before Cleo.\n6. Eli gives the talk on an earlier day than Dev.\n7. Fay gives the talk on an earlier day than Ben.\n8. Fay does not give the talk on Tuesday.\n\nQuestion: Who gives the talk on Friday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>",
+  "answer": "Ana",
+  "meta": {
+   "n_people": 7,
+   "n_clues": 8,
+   "clue_types": {
+    "before": 4,
+    "not_adjacent": 1,
+    "not_on": 2,
+    "immediately_before": 1
+   },
+   "people": [
+    "Ana",
+    "Ben",
+    "Cleo",
+    "Dev",
+    "Eli",
+    "Fay",
+    "Hana"
+   ],
+   "question_day": "Friday"
+  }
+ },
+ {
+  "id": "deduce-004",
+  "family": "deduce",
+  "answer_type": "name",
+  "prompt": "Seven people, Ana, Ben, Cleo, Dev, Eli, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Ana and Cleo do not give their talks on consecutive days.\n2. Cleo and Eli do not give their talks on consecutive days.\n3. Ana gives the talk on an earlier day than Dev.\n4. Ana does not give the talk on Tuesday.\n5. Gus gives the talk on an earlier day than Ben.\n6. Hana gives the talk on the day immediately before Ben.\n7. Gus and Eli do not give their talks on consecutive days.\n8. Gus and Cleo do not give their talks on consecutive days.\n9. Cleo gives the talk on an earlier day than Dev.\n\nQuestion: Who gives the talk on Wednesday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>",
+  "answer": "Hana",
+  "meta": {
+   "n_people": 7,
+   "n_clues": 9,
+   "clue_types": {
+    "not_adjacent": 4,
+    "before": 3,
+    "not_on": 1,
+    "immediately_before": 1
+   },
+   "people": [
+    "Ana",
+    "Ben",
+    "Cleo",
+    "Dev",
+    "Eli",
+    "Gus",
+    "Hana"
+   ],
+   "question_day": "Wednesday"
+  }
+ },
+ {
+  "id": "deduce-005",
+  "family": "deduce",
+  "answer_type": "name",
+  "prompt": "Seven people, Ana, Ben, Dev, Eli, Fay, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Dev gives the talk on an earlier day than Ana.\n2. Gus gives the talk on the day immediately before Ana.\n3. Ana and Eli do not give their talks on consecutive days.\n4. Gus gives the talk on an earlier day than Hana.\n5. Ben gives the talk on an earlier day than Dev.\n6. Ana does not give the talk on Friday.\n7. Ana and Hana do not give their talks on consecutive days.\n8. Hana does not give the talk on Saturday.\n\nQuestion: Who gives the talk on Tuesday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>",
+  "answer": "Dev",
+  "meta": {
+   "n_people": 7,
+   "n_clues": 8,
+   "clue_types": {
+    "before": 3,
+    "immediately_before": 1,
+    "not_adjacent": 2,
+    "not_on": 2
+   },
+   "people": [
+    "Ana",
+    "Ben",
+    "Dev",
+    "Eli",
+    "Fay",
+    "Gus",
+    "Hana"
+   ],
+   "question_day": "Tuesday"
+  }
+ },
+ {
+  "id": "deduce-006",
+  "family": "deduce",
+  "answer_type": "name",
+  "prompt": "Seven people, Ana, Ben, Cleo, Dev, Eli, Fay and Gus, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Ana gives the talk on an earlier day than Fay.\n2. Fay gives the talk on the day immediately before Ben.\n3. Eli gives the talk on the day immediately before Dev.\n4. Cleo does not give the talk on Monday.\n5. Gus gives the talk on an earlier day than Eli.\n6. Cleo gives the talk on the day immediately before Gus.\n7. Ana and Cleo do not give their talks on consecutive days.\n\nQuestion: Who gives the talk on Tuesday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>",
+  "answer": "Fay",
+  "meta": {
+   "n_people": 7,
+   "n_clues": 7,
+   "clue_types": {
+    "before": 2,
+    "immediately_before": 3,
+    "not_on": 1,
+    "not_adjacent": 1
+   },
+   "people": [
+    "Ana",
+    "Ben",
+    "Cleo",
+    "Dev",
+    "Eli",
+    "Fay",
+    "Gus"
+   ],
+   "question_day": "Tuesday"
+  }
+ },
+ {
+  "id": "deduce-007",
+  "family": "deduce",
+  "answer_type": "name",
+  "prompt": "Seven people, Ana, Cleo, Dev, Eli, Fay, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Eli and Fay do not give their talks on consecutive days.\n2. Ana and Fay do not give their talks on consecutive days.\n3. Ana and Eli do not give their talks on consecutive days.\n4. Eli gives the talk on the day immediately before Dev.\n5. Dev gives the talk on the day immediately before Gus.\n6. Hana gives the talk on the day immediately before Cleo.\n7. Ana gives the talk on an earlier day than Eli.\n\nQuestion: Who gives the talk on Thursday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>",
+  "answer": "Eli",
+  "meta": {
+   "n_people": 7,
+   "n_clues": 7,
+   "clue_types": {
+    "not_adjacent": 3,
+    "immediately_before": 3,
+    "before": 1
+   },
+   "people": [
+    "Ana",
+    "Cleo",
+    "Dev",
+    "Eli",
+    "Fay",
+    "Gus",
+    "Hana"
+   ],
+   "question_day": "Thursday"
+  }
+ },
+ {
+  "id": "arith-000",
+  "family": "arith",
+  "answer_type": "int",
+  "prompt": "A warehouse holds 5382 boxes. A truck then delivers 6 loads of 13 boxes each. All the boxes in the warehouse are then split equally among 7 stores. Each store sells 10% of the boxes it received. How many unsold boxes do the 7 stores have in total?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>",
+  "answer": "4914",
+  "meta": {
+   "template": "warehouse",
+   "steps": 6,
+   "ops": [
+    "*",
+    "+",
+    "/",
+    "%",
+    "-",
+    "*"
+   ],
+   "params": {
+    "a": 5382,
+    "t": 6,
+    "b": 13,
+    "s": 7,
+    "pct": 10
+   }
+  }
+ },
+ {
+  "id": "arith-001",
+  "family": "arith",
+  "answer_type": "int",
+  "prompt": "A courier drives for 6 hours at 90 km/h, then drives another 204 km. The van uses one litre of fuel for every 12 km. Fuel costs 320 rupees per litre, and a fuel tax adds 25% to the fuel cost. How many rupees does the fuel for the whole trip cost, including the tax?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>",
+  "answer": "24800",
+  "meta": {
+   "template": "fuel",
+   "steps": 6,
+   "ops": [
+    "*",
+    "+",
+    "/",
+    "*",
+    "%",
+    "+"
+   ],
+   "params": {
+    "h": 6,
+    "v": 90,
+    "d2": 204,
+    "k": 12,
+    "c": 320,
+    "pct": 25
+   }
+  }
+ },
+ {
+  "id": "arith-002",
+  "family": "arith",
+  "answer_type": "int",
+  "prompt": "Maya earns 1160 dollars per week for 27 weeks. She spends 20% of her total earnings on rent. Then she buys 10 books at 105 dollars each. She splits the money she has left equally into 6 envelopes. How many dollars go into each envelope?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>",
+  "answer": "4001",
+  "meta": {
+   "template": "savings",
+   "steps": 6,
+   "ops": [
+    "*",
+    "%",
+    "-",
+    "*",
+    "-",
+    "/"
+   ],
+   "params": {
+    "w": 1160,
+    "n": 27,
+    "pct": 20,
+    "m": 10,
+    "c": 105,
+    "j": 6
+   }
+  }
+ },
+ {
+  "id": "arith-003",
+  "family": "arith",
+  "answer_type": "int",
+  "prompt": "A recipe for 6 servings uses 432 grams of flour. A bakery makes 6 batches, and each batch is 45 servings. In every batch an extra 5% of that batch's recipe flour is lost to spills, so it has to be added on top. The bakery already has 2408 grams of flour in stock. How many more grams of flour does the bakery need to buy?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>",
+  "answer": "18004",
+  "meta": {
+   "template": "recipe",
+   "steps": 6,
+   "ops": [
+    "/",
+    "*",
+    "%",
+    "+",
+    "*",
+    "-"
+   ],
+   "params": {
+    "s": 6,
+    "g": 432,
+    "big": 45,
+    "pct": 5,
+    "m": 6,
+    "stock": 2408
+   }
+  }
+ },
+ {
+  "id": "arith-004",
+  "family": "arith",
+  "answer_type": "int",
+  "prompt": "A warehouse holds 6348 boxes. A truck then delivers 6 loads of 22 boxes each. All the boxes in the warehouse are then split equally among 6 stores. Each store sells 40% of the boxes it received. How many unsold boxes do the 6 stores have in total?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>",
+  "answer": "3888",
+  "meta": {
+   "template": "warehouse",
+   "steps": 6,
+   "ops": [
+    "*",
+    "+",
+    "/",
+    "%",
+    "-",
+    "*"
+   ],
+   "params": {
+    "a": 6348,
+    "t": 6,
+    "b": 22,
+    "s": 6,
+    "pct": 40
+   }
+  }
+ },
+ {
+  "id": "arith-005",
+  "family": "arith",
+  "answer_type": "int",
+  "prompt": "A courier drives for 4 hours at 75 km/h, then drives another 134 km. The van uses one litre of fuel for every 14 km. Fuel costs 340 rupees per litre, and a fuel tax adds 15% to the fuel cost. How many rupees does the fuel for the whole trip cost, including the tax?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>",
+  "answer": "12121",
+  "meta": {
+   "template": "fuel",
+   "steps": 6,
+   "ops": [
+    "*",
+    "+",
+    "/",
+    "*",
+    "%",
+    "+"
+   ],
+   "params": {
+    "h": 4,
+    "v": 75,
+    "d2": 134,
+    "k": 14,
+    "c": 340,
+    "pct": 15
+   }
+  }
+ },
+ {
+  "id": "arith-006",
+  "family": "arith",
+  "answer_type": "int",
+  "prompt": "Maya earns 520 dollars per week for 18 weeks. She spends 40% of her total earnings on rent. Then she buys 8 books at 48 dollars each. She splits the money she has left equally into 4 envelopes. How many dollars go into each envelope?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>",
+  "answer": "1308",
+  "meta": {
+   "template": "savings",
+   "steps": 6,
+   "ops": [
+    "*",
+    "%",
+    "-",
+    "*",
+    "-",
+    "/"
+   ],
+   "params": {
+    "w": 520,
+    "n": 18,
+    "pct": 40,
+    "m": 8,
+    "c": 48,
+    "j": 4
+   }
+  }
+ },
+ {
+  "id": "arith-007",
+  "family": "arith",
+  "answer_type": "int",
+  "prompt": "A recipe for 4 servings uses 240 grams of flour. A bakery makes 8 batches, and each batch is 45 servings. In every batch an extra 25% of that batch's recipe flour is lost to spills, so it has to be added on top. The bakery already has 8383 grams of flour in stock. How many more grams of flour does the bakery need to buy?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>",
+  "answer": "18617",
+  "meta": {
+   "template": "recipe",
+   "steps": 6,
+   "ops": [
+    "/",
+    "*",
+    "%",
+    "+",
+    "*",
+    "-"
+   ],
+   "params": {
+    "s": 4,
+    "g": 240,
+    "big": 45,
+    "pct": 25,
+    "m": 8,
+    "stock": 8383
+   }
+  }
+ }
+]

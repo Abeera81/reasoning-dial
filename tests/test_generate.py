@@ -15,7 +15,7 @@ SUFFIX_RE = re.compile(
     r"\n\nAnswer instruction: (Answer with the person's name\.|Answer with a whole number\.)"
     r"\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>\Z"
 )
-SEEDS = [1001, 1002, 2026, 7]
+SEEDS = [1002, 2026, 7]
 
 
 @pytest.fixture(scope="module", params=SEEDS)
@@ -28,8 +28,8 @@ def body(item):
 
 
 def test_same_seed_same_output():
-    assert g.generate_all(8, 1001) == g.generate_all(8, 1001)
-    assert g.generate_all(8, 1001) != g.generate_all(8, 1002)
+    assert g.generate_all(4, 1002) == g.generate_all(4, 1002)
+    assert g.generate_all(4, 1002) != g.generate_all(4, 2026)
 
 
 def test_shape_and_suffix(items):
@@ -90,9 +90,11 @@ def test_deduce_unique_and_correct(items):
         who = [x for x, d in sols[0].items() if d == D[q_day]]
         assert who == [it["answer"]], it["id"]
         assert n_clues == it["meta"]["n_clues"]
-        assert it["meta"]["clue_types"].get("on", 0) <= 1
-        # The asked person is never pinned by an on() clue.
-        assert f"{it['answer']} gives the talk on {q_day}." not in it["prompt"]
+        # Retuned settings: 7 people Monday-Sunday, no on() clues, asked day Tue-Sat.
+        assert len(people) == 7 and list(D) == ["Monday", "Tuesday", "Wednesday", "Thursday",
+                                                "Friday", "Saturday", "Sunday"]
+        assert not re.search(r"^\d+\. \w+ gives the talk on \w+day\.$", body(it), re.M)
+        assert q_day in ("Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 
 
 # ---------------------------------------------------------------- arith: independent recomputation
@@ -101,23 +103,43 @@ def nums(text):
     return [int(x) for x in re.findall(r"\d+", text)]
 
 
+def exact_div(x, d):
+    assert x % d == 0
+    return x // d
+
+
+def exact_pct(x, p):
+    assert (x * p) % 100 == 0
+    return x * p // 100
+
+
 def solve_arith(text):
+    """Recompute from the prompt numbers; return (answer, intermediates)."""
     if text.startswith("A warehouse"):
-        a, t, b, s, k, _ = nums(text)
+        a, t, b, s, pct, s2 = nums(text)
+        assert s == s2
         total = a + t * b
-        assert total % s == 0
-        return s * (total // s - k)
+        per = exact_div(total, s)
+        left = per - exact_pct(per, pct)
+        mids = [t * b, total, per, exact_pct(per, pct), left]
+        return s * left, mids
     if text.startswith("A courier"):
-        h1, v1, h2, v2, d, p = nums(text)
-        return (h1 * v1 + h2 * v2 + d) * p
+        h, v, d2, k, c, pct = nums(text)
+        km = h * v + d2
+        litres = exact_div(km, k)
+        cost = litres * c
+        return cost + exact_pct(cost, pct), [h * v, km, litres, cost, exact_pct(cost, pct)]
     if text.startswith("Maya"):
-        w, n, pct, m, c = nums(text)
-        assert (w * n * pct) % 100 == 0
-        return w * n - w * n * pct // 100 - m * c
+        w, n, pct, m, c, j = nums(text)
+        after = w * n - exact_pct(w * n, pct)
+        left = after - m * c
+        return exact_div(left, j), [w * n, exact_pct(w * n, pct), after, m * c, left]
     if text.startswith("A recipe"):
-        s, g_, m, big, w = nums(text)
-        assert big % s == 0
-        return m * (g_ * big // s + w)
+        s, g_, m, big, pct, stock = nums(text)
+        batch = exact_div(g_, s) * big
+        per_batch = batch + exact_pct(batch, pct)
+        need = per_batch * m
+        return need - stock, [exact_div(g_, s), batch, exact_pct(batch, pct), per_batch, need]
     raise AssertionError(text)
 
 
@@ -126,9 +148,12 @@ def test_arith_answers(items):
     for it in items:
         if it["family"] != "arith":
             continue
-        assert solve_arith(body(it)) == int(it["answer"]), it["id"]
-        assert 100 <= int(it["answer"]) <= 99999
-        assert 4 <= it["meta"]["steps"] <= 5
+        ans, mids = solve_arith(body(it))
+        assert ans == int(it["answer"]), it["id"]
+        assert 1000 <= ans <= 999999, it["id"]
+        assert all(0 < x <= 99999 for x in mids), (it["id"], mids)
+        assert it["meta"]["steps"] == 6 and len(mids) + 1 == 6
+        assert "%" in it["meta"]["ops"] and "/" in it["meta"]["ops"]
         templates.add(it["meta"]["template"])
     assert len(templates) >= 4
 
@@ -153,7 +178,19 @@ def test_distract_answers_and_blacklist(items):
 
 
 def test_calibration_file_matches_generator():
-    path = ROOT / "data" / "calibration_items.json"
+    # Calibration 1 (seed 1001) used the pre-retune generator and is kept as a record only.
+    path = ROOT / "data" / "calibration_items_seed1002.json"
     if not path.exists():
         pytest.skip("calibration file not generated")
-    assert json.loads(path.read_text(encoding="utf-8")) == g.generate_all(8, 1001)
+    want = g.generate("deduce", 8, 1002) + g.generate("arith", 8, 1002)
+    assert json.loads(path.read_text(encoding="utf-8")) == want
+
+
+def test_test_items_match_generator_and_hash():
+    path = ROOT / "data" / "test_items.json"
+    if not path.exists():
+        pytest.skip("test items not generated yet")
+    import hashlib
+    assert json.loads(path.read_text(encoding="utf-8")) == g.generate_all(20, 2026)
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    assert (ROOT / "data" / "test_items.sha256").read_text(encoding="utf-8").split()[0] == digest

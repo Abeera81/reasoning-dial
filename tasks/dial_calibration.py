@@ -11,7 +11,7 @@ import kaggle_benchmarks as kbench
 # ---------------------------------------------------------------- config
 LEVELS = ["none", "high"]
 R = 1
-CACHE_PROBE = True
+CACHE_PROBE = False
 N_JOBS = 8
 SEED_BASE = 1000  # seed = SEED_BASE + repeat (google/* models drop the seed)
 KNOWN_NAMES = ["Ana", "Ben", "Cleo", "Dev", "Eli", "Fay", "Gus", "Hana"]
@@ -80,7 +80,16 @@ def parse(raw: str, answer_type: str, known_names: list[str]) -> dict:
     last non-empty visible line (secondary accuracy only)."""
     visible = strip_think(raw or "")
     markers = list(_MARKER.finditer(visible))
-    parsed = normalize(markers[-1].group(1), answer_type, known_names) if markers else None
+    parsed = None
+    if markers:
+        last = markers[-1]
+        value = last.group(1)
+        if not _clean(value):
+            # Empty marker: use the last non-empty line before it (rule added 2026-10-10,
+            # before the lock, after calibration showed "Ben\n\nFINAL ANSWER:").
+            before = [ln for ln in visible[: last.start()].splitlines() if _clean(ln)]
+            value = before[-1] if before else None
+        parsed = normalize(value, answer_type, known_names)
     lenient = parsed
     if lenient is None:
         lines = [ln for ln in visible.splitlines() if ln.strip()]
@@ -110,160 +119,17 @@ def outcome(parsed, expected, answer_type: str) -> str:
 ITEMS = [{'id': 'deduce-000',
   'family': 'deduce',
   'answer_type': 'name',
-  'prompt': 'Five people, Ben, Cleo, Dev, Eli and Fay, each give exactly one talk. The talks are '
-            'on 5 consecutive days, Monday to Friday, one talk per day.\n'
+  'prompt': 'Seven people, Ana, Ben, Cleo, Dev, Fay, Gus and Hana, each give exactly one talk. The '
+            'talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n'
             '\n'
             'Clues:\n'
-            '1. Fay gives the talk on Friday.\n'
-            '2. Dev does not give the talk on Monday.\n'
-            '3. Ben gives the talk on the day immediately before Cleo.\n'
-            '4. Dev gives the talk on an earlier day than Eli.\n'
-            '\n'
-            'Question: Who gives the talk on Monday?\n'
-            '\n'
-            "Answer instruction: Answer with the person's name.\n"
-            '\n'
-            'End your response with a final line in exactly this format:\n'
-            'FINAL ANSWER: <answer>',
-  'answer': 'Ben',
-  'meta': {'n_people': 5,
-           'n_clues': 4,
-           'clue_types': {'on': 1, 'not_on': 1, 'immediately_before': 1, 'before': 1},
-           'people': ['Ben', 'Cleo', 'Dev', 'Eli', 'Fay'],
-           'question_day': 'Monday'}},
- {'id': 'deduce-001',
-  'family': 'deduce',
-  'answer_type': 'name',
-  'prompt': 'Five people, Ana, Ben, Eli, Fay and Gus, each give exactly one talk. The talks are on '
-            '5 consecutive days, Monday to Friday, one talk per day.\n'
-            '\n'
-            'Clues:\n'
-            '1. Fay gives the talk on an earlier day than Ben.\n'
-            '2. Gus and Ben do not give their talks on consecutive days.\n'
-            '3. Eli and Ben do not give their talks on consecutive days.\n'
-            '4. Gus gives the talk on the day immediately before Eli.\n'
-            '5. Fay gives the talk on the day immediately before Ana.\n'
-            '\n'
-            'Question: Who gives the talk on Thursday?\n'
-            '\n'
-            "Answer instruction: Answer with the person's name.\n"
-            '\n'
-            'End your response with a final line in exactly this format:\n'
-            'FINAL ANSWER: <answer>',
-  'answer': 'Ana',
-  'meta': {'n_people': 5,
-           'n_clues': 5,
-           'clue_types': {'before': 1, 'not_adjacent': 2, 'immediately_before': 2},
-           'people': ['Ana', 'Ben', 'Eli', 'Fay', 'Gus'],
-           'question_day': 'Thursday'}},
- {'id': 'deduce-002',
-  'family': 'deduce',
-  'answer_type': 'name',
-  'prompt': 'Five people, Ben, Cleo, Dev, Eli and Hana, each give exactly one talk. The talks are '
-            'on 5 consecutive days, Monday to Friday, one talk per day.\n'
-            '\n'
-            'Clues:\n'
-            '1. Ben gives the talk on Tuesday.\n'
-            '2. Cleo does not give the talk on Thursday.\n'
-            '3. Ben gives the talk on an earlier day than Hana.\n'
-            '4. Ben and Eli do not give their talks on consecutive days.\n'
-            '5. Hana and Eli do not give their talks on consecutive days.\n'
-            '\n'
-            'Question: Who gives the talk on Wednesday?\n'
-            '\n'
-            "Answer instruction: Answer with the person's name.\n"
-            '\n'
-            'End your response with a final line in exactly this format:\n'
-            'FINAL ANSWER: <answer>',
-  'answer': 'Hana',
-  'meta': {'n_people': 5,
-           'n_clues': 5,
-           'clue_types': {'on': 1, 'not_on': 1, 'before': 1, 'not_adjacent': 2},
-           'people': ['Ben', 'Cleo', 'Dev', 'Eli', 'Hana'],
-           'question_day': 'Wednesday'}},
- {'id': 'deduce-003',
-  'family': 'deduce',
-  'answer_type': 'name',
-  'prompt': 'Five people, Dev, Eli, Fay, Gus and Hana, each give exactly one talk. The talks are '
-            'on 5 consecutive days, Monday to Friday, one talk per day.\n'
-            '\n'
-            'Clues:\n'
-            '1. Dev gives the talk on Friday.\n'
-            '2. Fay does not give the talk on Thursday.\n'
-            '3. Eli gives the talk on an earlier day than Gus.\n'
-            '4. Gus gives the talk on an earlier day than Fay.\n'
-            '\n'
-            'Question: Who gives the talk on Tuesday?\n'
-            '\n'
-            "Answer instruction: Answer with the person's name.\n"
-            '\n'
-            'End your response with a final line in exactly this format:\n'
-            'FINAL ANSWER: <answer>',
-  'answer': 'Gus',
-  'meta': {'n_people': 5,
-           'n_clues': 4,
-           'clue_types': {'on': 1, 'not_on': 1, 'before': 2},
-           'people': ['Dev', 'Eli', 'Fay', 'Gus', 'Hana'],
-           'question_day': 'Tuesday'}},
- {'id': 'deduce-004',
-  'family': 'deduce',
-  'answer_type': 'name',
-  'prompt': 'Five people, Ben, Cleo, Dev, Fay and Hana, each give exactly one talk. The talks are '
-            'on 5 consecutive days, Monday to Friday, one talk per day.\n'
-            '\n'
-            'Clues:\n'
-            '1. Cleo gives the talk on an earlier day than Ben.\n'
-            '2. Fay gives the talk on an earlier day than Cleo.\n'
-            '3. Fay and Cleo do not give their talks on consecutive days.\n'
-            '4. Dev gives the talk on the day immediately before Hana.\n'
-            '\n'
-            'Question: Who gives the talk on Wednesday?\n'
-            '\n'
-            "Answer instruction: Answer with the person's name.\n"
-            '\n'
-            'End your response with a final line in exactly this format:\n'
-            'FINAL ANSWER: <answer>',
-  'answer': 'Hana',
-  'meta': {'n_people': 5,
-           'n_clues': 4,
-           'clue_types': {'before': 2, 'not_adjacent': 1, 'immediately_before': 1},
-           'people': ['Ben', 'Cleo', 'Dev', 'Fay', 'Hana'],
-           'question_day': 'Wednesday'}},
- {'id': 'deduce-005',
-  'family': 'deduce',
-  'answer_type': 'name',
-  'prompt': 'Five people, Ana, Dev, Eli, Fay and Gus, each give exactly one talk. The talks are on '
-            '5 consecutive days, Monday to Friday, one talk per day.\n'
-            '\n'
-            'Clues:\n'
-            '1. Dev and Gus do not give their talks on consecutive days.\n'
-            '2. Dev gives the talk on Tuesday.\n'
-            '3. Gus gives the talk on an earlier day than Fay.\n'
-            '4. Dev gives the talk on an earlier day than Eli.\n'
-            '\n'
-            'Question: Who gives the talk on Monday?\n'
-            '\n'
-            "Answer instruction: Answer with the person's name.\n"
-            '\n'
-            'End your response with a final line in exactly this format:\n'
-            'FINAL ANSWER: <answer>',
-  'answer': 'Ana',
-  'meta': {'n_people': 5,
-           'n_clues': 4,
-           'clue_types': {'not_adjacent': 1, 'on': 1, 'before': 2},
-           'people': ['Ana', 'Dev', 'Eli', 'Fay', 'Gus'],
-           'question_day': 'Monday'}},
- {'id': 'deduce-006',
-  'family': 'deduce',
-  'answer_type': 'name',
-  'prompt': 'Five people, Cleo, Dev, Fay, Gus and Hana, each give exactly one talk. The talks are '
-            'on 5 consecutive days, Monday to Friday, one talk per day.\n'
-            '\n'
-            'Clues:\n'
-            '1. Dev gives the talk on Wednesday.\n'
-            '2. Hana gives the talk on an earlier day than Cleo.\n'
-            '3. Cleo does not give the talk on Friday.\n'
-            '4. Hana gives the talk on the day immediately before Gus.\n'
+            '1. Dev gives the talk on an earlier day than Gus.\n'
+            '2. Ana and Gus do not give their talks on consecutive days.\n'
+            '3. Fay does not give the talk on Saturday.\n'
+            '4. Ana gives the talk on the day immediately before Cleo.\n'
+            '5. Hana gives the talk on an earlier day than Fay.\n'
+            '6. Ben gives the talk on an earlier day than Hana.\n'
+            '7. Dev gives the talk on the day immediately before Fay.\n'
             '\n'
             'Question: Who gives the talk on Friday?\n'
             '\n'
@@ -271,24 +137,193 @@ ITEMS = [{'id': 'deduce-000',
             '\n'
             'End your response with a final line in exactly this format:\n'
             'FINAL ANSWER: <answer>',
-  'answer': 'Fay',
-  'meta': {'n_people': 5,
-           'n_clues': 4,
-           'clue_types': {'on': 1, 'before': 1, 'not_on': 1, 'immediately_before': 1},
-           'people': ['Cleo', 'Dev', 'Fay', 'Gus', 'Hana'],
+  'answer': 'Ana',
+  'meta': {'n_people': 7,
+           'n_clues': 7,
+           'clue_types': {'before': 3, 'not_adjacent': 1, 'not_on': 1, 'immediately_before': 2},
+           'people': ['Ana', 'Ben', 'Cleo', 'Dev', 'Fay', 'Gus', 'Hana'],
            'question_day': 'Friday'}},
+ {'id': 'deduce-001',
+  'family': 'deduce',
+  'answer_type': 'name',
+  'prompt': 'Seven people, Ana, Ben, Cleo, Dev, Eli, Gus and Hana, each give exactly one talk. The '
+            'talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n'
+            '\n'
+            'Clues:\n'
+            '1. Ben does not give the talk on Saturday.\n'
+            '2. Hana gives the talk on an earlier day than Ben.\n'
+            '3. Ana does not give the talk on Wednesday.\n'
+            '4. Eli gives the talk on the day immediately before Ben.\n'
+            '5. Cleo gives the talk on the day immediately before Hana.\n'
+            '6. Dev gives the talk on an earlier day than Ana.\n'
+            '7. Dev gives the talk on the day immediately before Gus.\n'
+            '8. Dev gives the talk on an earlier day than Cleo.\n'
+            '\n'
+            'Question: Who gives the talk on Saturday?\n'
+            '\n'
+            "Answer instruction: Answer with the person's name.\n"
+            '\n'
+            'End your response with a final line in exactly this format:\n'
+            'FINAL ANSWER: <answer>',
+  'answer': 'Eli',
+  'meta': {'n_people': 7,
+           'n_clues': 8,
+           'clue_types': {'not_on': 2, 'before': 3, 'immediately_before': 3},
+           'people': ['Ana', 'Ben', 'Cleo', 'Dev', 'Eli', 'Gus', 'Hana'],
+           'question_day': 'Saturday'}},
+ {'id': 'deduce-002',
+  'family': 'deduce',
+  'answer_type': 'name',
+  'prompt': 'Seven people, Ana, Cleo, Dev, Eli, Fay, Gus and Hana, each give exactly one talk. The '
+            'talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n'
+            '\n'
+            'Clues:\n'
+            '1. Gus gives the talk on the day immediately before Fay.\n'
+            '2. Cleo and Ana do not give their talks on consecutive days.\n'
+            '3. Hana gives the talk on the day immediately before Eli.\n'
+            '4. Eli does not give the talk on Wednesday.\n'
+            '5. Ana does not give the talk on Wednesday.\n'
+            '6. Eli gives the talk on an earlier day than Dev.\n'
+            '7. Ana gives the talk on the day immediately before Hana.\n'
+            '\n'
+            'Question: Who gives the talk on Wednesday?\n'
+            '\n'
+            "Answer instruction: Answer with the person's name.\n"
+            '\n'
+            'End your response with a final line in exactly this format:\n'
+            'FINAL ANSWER: <answer>',
+  'answer': 'Fay',
+  'meta': {'n_people': 7,
+           'n_clues': 7,
+           'clue_types': {'immediately_before': 3, 'not_adjacent': 1, 'not_on': 2, 'before': 1},
+           'people': ['Ana', 'Cleo', 'Dev', 'Eli', 'Fay', 'Gus', 'Hana'],
+           'question_day': 'Wednesday'}},
+ {'id': 'deduce-003',
+  'family': 'deduce',
+  'answer_type': 'name',
+  'prompt': 'Seven people, Ana, Ben, Cleo, Dev, Eli, Fay and Hana, each give exactly one talk. The '
+            'talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n'
+            '\n'
+            'Clues:\n'
+            '1. Cleo gives the talk on an earlier day than Hana.\n'
+            '2. Ben and Ana do not give their talks on consecutive days.\n'
+            '3. Ben does not give the talk on Tuesday.\n'
+            '4. Ben gives the talk on an earlier day than Cleo.\n'
+            '5. Ana gives the talk on the day immediately before Cleo.\n'
+            '6. Eli gives the talk on an earlier day than Dev.\n'
+            '7. Fay gives the talk on an earlier day than Ben.\n'
+            '8. Fay does not give the talk on Tuesday.\n'
+            '\n'
+            'Question: Who gives the talk on Friday?\n'
+            '\n'
+            "Answer instruction: Answer with the person's name.\n"
+            '\n'
+            'End your response with a final line in exactly this format:\n'
+            'FINAL ANSWER: <answer>',
+  'answer': 'Ana',
+  'meta': {'n_people': 7,
+           'n_clues': 8,
+           'clue_types': {'before': 4, 'not_adjacent': 1, 'not_on': 2, 'immediately_before': 1},
+           'people': ['Ana', 'Ben', 'Cleo', 'Dev', 'Eli', 'Fay', 'Hana'],
+           'question_day': 'Friday'}},
+ {'id': 'deduce-004',
+  'family': 'deduce',
+  'answer_type': 'name',
+  'prompt': 'Seven people, Ana, Ben, Cleo, Dev, Eli, Gus and Hana, each give exactly one talk. The '
+            'talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n'
+            '\n'
+            'Clues:\n'
+            '1. Ana and Cleo do not give their talks on consecutive days.\n'
+            '2. Cleo and Eli do not give their talks on consecutive days.\n'
+            '3. Ana gives the talk on an earlier day than Dev.\n'
+            '4. Ana does not give the talk on Tuesday.\n'
+            '5. Gus gives the talk on an earlier day than Ben.\n'
+            '6. Hana gives the talk on the day immediately before Ben.\n'
+            '7. Gus and Eli do not give their talks on consecutive days.\n'
+            '8. Gus and Cleo do not give their talks on consecutive days.\n'
+            '9. Cleo gives the talk on an earlier day than Dev.\n'
+            '\n'
+            'Question: Who gives the talk on Wednesday?\n'
+            '\n'
+            "Answer instruction: Answer with the person's name.\n"
+            '\n'
+            'End your response with a final line in exactly this format:\n'
+            'FINAL ANSWER: <answer>',
+  'answer': 'Hana',
+  'meta': {'n_people': 7,
+           'n_clues': 9,
+           'clue_types': {'not_adjacent': 4, 'before': 3, 'not_on': 1, 'immediately_before': 1},
+           'people': ['Ana', 'Ben', 'Cleo', 'Dev', 'Eli', 'Gus', 'Hana'],
+           'question_day': 'Wednesday'}},
+ {'id': 'deduce-005',
+  'family': 'deduce',
+  'answer_type': 'name',
+  'prompt': 'Seven people, Ana, Ben, Dev, Eli, Fay, Gus and Hana, each give exactly one talk. The '
+            'talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n'
+            '\n'
+            'Clues:\n'
+            '1. Dev gives the talk on an earlier day than Ana.\n'
+            '2. Gus gives the talk on the day immediately before Ana.\n'
+            '3. Ana and Eli do not give their talks on consecutive days.\n'
+            '4. Gus gives the talk on an earlier day than Hana.\n'
+            '5. Ben gives the talk on an earlier day than Dev.\n'
+            '6. Ana does not give the talk on Friday.\n'
+            '7. Ana and Hana do not give their talks on consecutive days.\n'
+            '8. Hana does not give the talk on Saturday.\n'
+            '\n'
+            'Question: Who gives the talk on Tuesday?\n'
+            '\n'
+            "Answer instruction: Answer with the person's name.\n"
+            '\n'
+            'End your response with a final line in exactly this format:\n'
+            'FINAL ANSWER: <answer>',
+  'answer': 'Dev',
+  'meta': {'n_people': 7,
+           'n_clues': 8,
+           'clue_types': {'before': 3, 'immediately_before': 1, 'not_adjacent': 2, 'not_on': 2},
+           'people': ['Ana', 'Ben', 'Dev', 'Eli', 'Fay', 'Gus', 'Hana'],
+           'question_day': 'Tuesday'}},
+ {'id': 'deduce-006',
+  'family': 'deduce',
+  'answer_type': 'name',
+  'prompt': 'Seven people, Ana, Ben, Cleo, Dev, Eli, Fay and Gus, each give exactly one talk. The '
+            'talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n'
+            '\n'
+            'Clues:\n'
+            '1. Ana gives the talk on an earlier day than Fay.\n'
+            '2. Fay gives the talk on the day immediately before Ben.\n'
+            '3. Eli gives the talk on the day immediately before Dev.\n'
+            '4. Cleo does not give the talk on Monday.\n'
+            '5. Gus gives the talk on an earlier day than Eli.\n'
+            '6. Cleo gives the talk on the day immediately before Gus.\n'
+            '7. Ana and Cleo do not give their talks on consecutive days.\n'
+            '\n'
+            'Question: Who gives the talk on Tuesday?\n'
+            '\n'
+            "Answer instruction: Answer with the person's name.\n"
+            '\n'
+            'End your response with a final line in exactly this format:\n'
+            'FINAL ANSWER: <answer>',
+  'answer': 'Fay',
+  'meta': {'n_people': 7,
+           'n_clues': 7,
+           'clue_types': {'before': 2, 'immediately_before': 3, 'not_on': 1, 'not_adjacent': 1},
+           'people': ['Ana', 'Ben', 'Cleo', 'Dev', 'Eli', 'Fay', 'Gus'],
+           'question_day': 'Tuesday'}},
  {'id': 'deduce-007',
   'family': 'deduce',
   'answer_type': 'name',
-  'prompt': 'Five people, Ana, Ben, Dev, Eli and Hana, each give exactly one talk. The talks are '
-            'on 5 consecutive days, Monday to Friday, one talk per day.\n'
+  'prompt': 'Seven people, Ana, Cleo, Dev, Eli, Fay, Gus and Hana, each give exactly one talk. The '
+            'talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n'
             '\n'
             'Clues:\n'
-            '1. Eli and Hana do not give their talks on consecutive days.\n'
-            '2. Hana does not give the talk on Friday.\n'
-            '3. Ben gives the talk on an earlier day than Ana.\n'
-            '4. Ben and Ana do not give their talks on consecutive days.\n'
-            '5. Ana gives the talk on an earlier day than Hana.\n'
+            '1. Eli and Fay do not give their talks on consecutive days.\n'
+            '2. Ana and Fay do not give their talks on consecutive days.\n'
+            '3. Ana and Eli do not give their talks on consecutive days.\n'
+            '4. Eli gives the talk on the day immediately before Dev.\n'
+            '5. Dev gives the talk on the day immediately before Gus.\n'
+            '6. Hana gives the talk on the day immediately before Cleo.\n'
+            '7. Ana gives the talk on an earlier day than Eli.\n'
             '\n'
             'Question: Who gives the talk on Thursday?\n'
             '\n'
@@ -296,307 +331,144 @@ ITEMS = [{'id': 'deduce-000',
             '\n'
             'End your response with a final line in exactly this format:\n'
             'FINAL ANSWER: <answer>',
-  'answer': 'Hana',
-  'meta': {'n_people': 5,
-           'n_clues': 5,
-           'clue_types': {'not_adjacent': 2, 'not_on': 1, 'before': 2},
-           'people': ['Ana', 'Ben', 'Dev', 'Eli', 'Hana'],
+  'answer': 'Eli',
+  'meta': {'n_people': 7,
+           'n_clues': 7,
+           'clue_types': {'not_adjacent': 3, 'immediately_before': 3, 'before': 1},
+           'people': ['Ana', 'Cleo', 'Dev', 'Eli', 'Fay', 'Gus', 'Hana'],
            'question_day': 'Thursday'}},
  {'id': 'arith-000',
   'family': 'arith',
   'answer_type': 'int',
-  'prompt': 'A warehouse holds 640 boxes. A truck then delivers 8 loads of 42 boxes each. All the '
-            'boxes in the warehouse are then split equally among 8 stores, and each store sells 32 '
-            'of the boxes it received. How many unsold boxes do the 8 stores have in total?\n'
+  'prompt': 'A warehouse holds 5382 boxes. A truck then delivers 6 loads of 13 boxes each. All the '
+            'boxes in the warehouse are then split equally among 7 stores. Each store sells 10% of '
+            'the boxes it received. How many unsold boxes do the 7 stores have in total?\n'
             '\n'
             'Answer instruction: Answer with a whole number.\n'
             '\n'
             'End your response with a final line in exactly this format:\n'
             'FINAL ANSWER: <answer>',
-  'answer': '720',
+  'answer': '4914',
   'meta': {'template': 'warehouse',
-           'steps': 5,
-           'params': {'a': 640, 't': 8, 'b': 42, 's': 8, 'k': 32}}},
+           'steps': 6,
+           'ops': ['*', '+', '/', '%', '-', '*'],
+           'params': {'a': 5382, 't': 6, 'b': 13, 's': 7, 'pct': 10}}},
  {'id': 'arith-001',
   'family': 'arith',
   'answer_type': 'int',
-  'prompt': 'A courier drives for 5 hours at 65 km/h, then for 2 hours at 75 km/h. A road closure '
-            'adds a detour of 36 km to the trip. The courier is paid 7 dollars for every kilometre '
-            'driven. How many dollars is the courier paid for the whole trip?\n'
+  'prompt': 'A courier drives for 6 hours at 90 km/h, then drives another 204 km. The van uses one '
+            'litre of fuel for every 12 km. Fuel costs 320 rupees per litre, and a fuel tax adds '
+            '25% to the fuel cost. How many rupees does the fuel for the whole trip cost, '
+            'including the tax?\n'
             '\n'
             'Answer instruction: Answer with a whole number.\n'
             '\n'
             'End your response with a final line in exactly this format:\n'
             'FINAL ANSWER: <answer>',
-  'answer': '3577',
-  'meta': {'template': 'trip',
-           'steps': 5,
-           'params': {'h1': 5, 'v1': 65, 'h2': 2, 'v2': 75, 'd': 36, 'p': 7}}},
+  'answer': '24800',
+  'meta': {'template': 'fuel',
+           'steps': 6,
+           'ops': ['*', '+', '/', '*', '%', '+'],
+           'params': {'h': 6, 'v': 90, 'd2': 204, 'k': 12, 'c': 320, 'pct': 25}}},
  {'id': 'arith-002',
   'family': 'arith',
   'answer_type': 'int',
-  'prompt': 'Maya earns 380 dollars per week for 13 weeks. She spends 55% of her total earnings on '
-            'rent. Then she buys 6 books at 26 dollars each. How many dollars does Maya have '
-            'left?\n'
+  'prompt': 'Maya earns 1160 dollars per week for 27 weeks. She spends 20% of her total earnings '
+            'on rent. Then she buys 10 books at 105 dollars each. She splits the money she has '
+            'left equally into 6 envelopes. How many dollars go into each envelope?\n'
             '\n'
             'Answer instruction: Answer with a whole number.\n'
             '\n'
             'End your response with a final line in exactly this format:\n'
             'FINAL ANSWER: <answer>',
-  'answer': '2067',
+  'answer': '4001',
   'meta': {'template': 'savings',
-           'steps': 5,
-           'params': {'w': 380, 'n': 13, 'pct': 55, 'm': 6, 'c': 26}}},
+           'steps': 6,
+           'ops': ['*', '%', '-', '*', '-', '/'],
+           'params': {'w': 1160, 'n': 27, 'pct': 20, 'm': 10, 'c': 105, 'j': 6}}},
  {'id': 'arith-003',
   'family': 'arith',
   'answer_type': 'int',
-  'prompt': 'A recipe for 6 servings uses 450 grams of flour. A bakery makes 3 batches, and each '
-            'batch is 36 servings. On top of the recipe amount, 65 grams of flour are spilled '
-            'during each batch. How many grams of flour does the bakery use in total?\n'
+  'prompt': 'A recipe for 6 servings uses 432 grams of flour. A bakery makes 6 batches, and each '
+            "batch is 45 servings. In every batch an extra 5% of that batch's recipe flour is lost "
+            'to spills, so it has to be added on top. The bakery already has 2408 grams of flour '
+            'in stock. How many more grams of flour does the bakery need to buy?\n'
             '\n'
             'Answer instruction: Answer with a whole number.\n'
             '\n'
             'End your response with a final line in exactly this format:\n'
             'FINAL ANSWER: <answer>',
-  'answer': '8295',
+  'answer': '18004',
   'meta': {'template': 'recipe',
-           'steps': 4,
-           'params': {'s': 6, 'big': 36, 'g': 450, 'w': 65, 'm': 3}}},
+           'steps': 6,
+           'ops': ['/', '*', '%', '+', '*', '-'],
+           'params': {'s': 6, 'g': 432, 'big': 45, 'pct': 5, 'm': 6, 'stock': 2408}}},
  {'id': 'arith-004',
   'family': 'arith',
   'answer_type': 'int',
-  'prompt': 'A warehouse holds 300 boxes. A truck then delivers 6 loads of 12 boxes each. All the '
-            'boxes in the warehouse are then split equally among 6 stores, and each store sells 13 '
-            'of the boxes it received. How many unsold boxes do the 6 stores have in total?\n'
+  'prompt': 'A warehouse holds 6348 boxes. A truck then delivers 6 loads of 22 boxes each. All the '
+            'boxes in the warehouse are then split equally among 6 stores. Each store sells 40% of '
+            'the boxes it received. How many unsold boxes do the 6 stores have in total?\n'
             '\n'
             'Answer instruction: Answer with a whole number.\n'
             '\n'
             'End your response with a final line in exactly this format:\n'
             'FINAL ANSWER: <answer>',
-  'answer': '294',
+  'answer': '3888',
   'meta': {'template': 'warehouse',
-           'steps': 5,
-           'params': {'a': 300, 't': 6, 'b': 12, 's': 6, 'k': 13}}},
+           'steps': 6,
+           'ops': ['*', '+', '/', '%', '-', '*'],
+           'params': {'a': 6348, 't': 6, 'b': 22, 's': 6, 'pct': 40}}},
  {'id': 'arith-005',
   'family': 'arith',
   'answer_type': 'int',
-  'prompt': 'A courier drives for 2 hours at 90 km/h, then for 3 hours at 75 km/h. A road closure '
-            'adds a detour of 12 km to the trip. The courier is paid 5 dollars for every kilometre '
-            'driven. How many dollars is the courier paid for the whole trip?\n'
+  'prompt': 'A courier drives for 4 hours at 75 km/h, then drives another 134 km. The van uses one '
+            'litre of fuel for every 14 km. Fuel costs 340 rupees per litre, and a fuel tax adds '
+            '15% to the fuel cost. How many rupees does the fuel for the whole trip cost, '
+            'including the tax?\n'
             '\n'
             'Answer instruction: Answer with a whole number.\n'
             '\n'
             'End your response with a final line in exactly this format:\n'
             'FINAL ANSWER: <answer>',
-  'answer': '2085',
-  'meta': {'template': 'trip',
-           'steps': 5,
-           'params': {'h1': 2, 'v1': 90, 'h2': 3, 'v2': 75, 'd': 12, 'p': 5}}},
+  'answer': '12121',
+  'meta': {'template': 'fuel',
+           'steps': 6,
+           'ops': ['*', '+', '/', '*', '%', '+'],
+           'params': {'h': 4, 'v': 75, 'd2': 134, 'k': 14, 'c': 340, 'pct': 15}}},
  {'id': 'arith-006',
   'family': 'arith',
   'answer_type': 'int',
-  'prompt': 'Maya earns 120 dollars per week for 11 weeks. She spends 15% of her total earnings on '
-            'rent. Then she buys 7 books at 42 dollars each. How many dollars does Maya have '
-            'left?\n'
+  'prompt': 'Maya earns 520 dollars per week for 18 weeks. She spends 40% of her total earnings on '
+            'rent. Then she buys 8 books at 48 dollars each. She splits the money she has left '
+            'equally into 4 envelopes. How many dollars go into each envelope?\n'
             '\n'
             'Answer instruction: Answer with a whole number.\n'
             '\n'
             'End your response with a final line in exactly this format:\n'
             'FINAL ANSWER: <answer>',
-  'answer': '828',
+  'answer': '1308',
   'meta': {'template': 'savings',
-           'steps': 5,
-           'params': {'w': 120, 'n': 11, 'pct': 15, 'm': 7, 'c': 42}}},
+           'steps': 6,
+           'ops': ['*', '%', '-', '*', '-', '/'],
+           'params': {'w': 520, 'n': 18, 'pct': 40, 'm': 8, 'c': 48, 'j': 4}}},
  {'id': 'arith-007',
   'family': 'arith',
   'answer_type': 'int',
-  'prompt': 'A recipe for 2 servings uses 460 grams of flour. A bakery makes 6 batches, and each '
-            'batch is 8 servings. On top of the recipe amount, 63 grams of flour are spilled '
-            'during each batch. How many grams of flour does the bakery use in total?\n'
+  'prompt': 'A recipe for 4 servings uses 240 grams of flour. A bakery makes 8 batches, and each '
+            "batch is 45 servings. In every batch an extra 25% of that batch's recipe flour is "
+            'lost to spills, so it has to be added on top. The bakery already has 8383 grams of '
+            'flour in stock. How many more grams of flour does the bakery need to buy?\n'
             '\n'
             'Answer instruction: Answer with a whole number.\n'
             '\n'
             'End your response with a final line in exactly this format:\n'
             'FINAL ANSWER: <answer>',
-  'answer': '11418',
+  'answer': '18617',
   'meta': {'template': 'recipe',
-           'steps': 4,
-           'params': {'s': 2, 'big': 8, 'g': 460, 'w': 63, 'm': 6}}},
- {'id': 'distract-000',
-  'family': 'distract',
-  'answer_type': 'int',
-  'prompt': 'You have an apple, a lemon and a pear.\n'
-            '\n'
-            'A colleague is working on a homework problem: if 20 crates each hold 29 peaches, how '
-            'many are there altogether?\n'
-            '\n'
-            'Question: Calculate how many fruits you have.\n'
-            '\n'
-            'Answer instruction: Answer with a whole number.\n'
-            '\n'
-            'End your response with a final line in exactly this format:\n'
-            'FINAL ANSWER: <answer>',
-  'answer': '3',
-  'meta': {'k': 3, 'category': 'fruits', 'distractor_types': ['math'], 'distractor_chars': 111}},
- {'id': 'distract-001',
-  'family': 'distract',
-  'answer_type': 'int',
-  'prompt': 'You have a banana, a mango and a pear.\n'
-            '\n'
-            'A friend shows you this code:\n'
-            '```python\n'
-            'stock = ["plum", "peach", "lemon"]\n'
-            'print(len(stock) * 5)\n'
-            '```\n'
-            '\n'
-            'There is a 12% chance that the banana comes from Peru.\n'
-            '\n'
-            'Question: Calculate how many fruits you have.\n'
-            '\n'
-            'Answer instruction: Answer with a whole number.\n'
-            '\n'
-            'End your response with a final line in exactly this format:\n'
-            'FINAL ANSWER: <answer>',
-  'answer': '3',
-  'meta': {'k': 3,
-           'category': 'fruits',
-           'distractor_types': ['code', 'probability'],
-           'distractor_chars': 156}},
- {'id': 'distract-002',
-  'family': 'distract',
-  'answer_type': 'int',
-  'prompt': 'You have a drill, a wrench, a saw, a level and a hammer.\n'
-            '\n'
-            'There is a 70% chance that the saw comes from Egypt.\n'
-            '\n'
-            'A shop in Brookfield sold 4,855 chisels last week.\n'
-            '\n'
-            'A friend shows you this code:\n'
-            '```python\n'
-            'stock = ["screwdriver", "chisel"]\n'
-            'print(len(stock) * 9)\n'
-            '```\n'
-            '\n'
-            'Question: Calculate how many tools you have.\n'
-            '\n'
-            'Answer instruction: Answer with a whole number.\n'
-            '\n'
-            'End your response with a final line in exactly this format:\n'
-            'FINAL ANSWER: <answer>',
-  'answer': '5',
-  'meta': {'k': 5,
-           'category': 'tools',
-           'distractor_types': ['probability', 'fact', 'code'],
-           'distractor_chars': 205}},
- {'id': 'distract-003',
-  'family': 'distract',
-  'answer_type': 'int',
-  'prompt': 'You have a hammer, a screwdriver and a drill.\n'
-            '\n'
-            'Your cousin is working on a homework problem: if 37 crates each hold 26 wrenches, how '
-            'many are there altogether?\n'
-            '\n'
-            'A shop in Brookfield sold 4,414 levels last month.\n'
-            '\n'
-            'Question: Calculate how many tools you have.\n'
-            '\n'
-            'Answer instruction: Answer with a whole number.\n'
-            '\n'
-            'End your response with a final line in exactly this format:\n'
-            'FINAL ANSWER: <answer>',
-  'answer': '3',
-  'meta': {'k': 3,
-           'category': 'tools',
-           'distractor_types': ['math', 'fact'],
-           'distractor_chars': 164}},
- {'id': 'distract-004',
-  'family': 'distract',
-  'answer_type': 'int',
-  'prompt': 'You have a screwdriver and a level.\n'
-            '\n'
-            'A colleague is working on a homework problem: if 27 crates each hold 16 wrenches, how '
-            'many are there altogether?\n'
-            '\n'
-            'There is a 31% chance that the level comes from Peru.\n'
-            '\n'
-            'Question: Calculate how many tools you have.\n'
-            '\n'
-            'Answer instruction: Answer with a whole number.\n'
-            '\n'
-            'End your response with a final line in exactly this format:\n'
-            'FINAL ANSWER: <answer>',
-  'answer': '2',
-  'meta': {'k': 2,
-           'category': 'tools',
-           'distractor_types': ['math', 'probability'],
-           'distractor_chars': 167}},
- {'id': 'distract-005',
-  'family': 'distract',
-  'answer_type': 'int',
-  'prompt': 'You have a drill, a chisel, a hammer and a screwdriver.\n'
-            '\n'
-            'A colleague is working on a homework problem: if 49 crates each hold 20 saws, how '
-            'many are there altogether?\n'
-            '\n'
-            'A friend shows you this code:\n'
-            '```python\n'
-            'stock = ["wrench", "level", "saw"]\n'
-            'print(len(stock) * 5)\n'
-            '```\n'
-            '\n'
-            'Question: Calculate how many tools you have.\n'
-            '\n'
-            'Answer instruction: Answer with a whole number.\n'
-            '\n'
-            'End your response with a final line in exactly this format:\n'
-            'FINAL ANSWER: <answer>',
-  'answer': '4',
-  'meta': {'k': 4,
-           'category': 'tools',
-           'distractor_types': ['math', 'code'],
-           'distractor_chars': 210}},
- {'id': 'distract-006',
-  'family': 'distract',
-  'answer_type': 'int',
-  'prompt': 'You have a cello, a guitar and a flute.\n'
-            '\n'
-            'A shop in Larkhill sold 4,723 violins last week.\n'
-            '\n'
-            'Question: Calculate how many musical instruments you have.\n'
-            '\n'
-            'Answer instruction: Answer with a whole number.\n'
-            '\n'
-            'End your response with a final line in exactly this format:\n'
-            'FINAL ANSWER: <answer>',
-  'answer': '3',
-  'meta': {'k': 3,
-           'category': 'musical instruments',
-           'distractor_types': ['fact'],
-           'distractor_chars': 48}},
- {'id': 'distract-007',
-  'family': 'distract',
-  'answer_type': 'int',
-  'prompt': 'You have an atlas and a dictionary.\n'
-            '\n'
-            'A friend shows you this code:\n'
-            '```python\n'
-            'stock = ["biography", "cookbook", "novel"]\n'
-            'print(len(stock) * 4)\n'
-            '```\n'
-            '\n'
-            'There is a 64% chance that the atlas comes from Spain.\n'
-            '\n'
-            'Question: Calculate how many books you have.\n'
-            '\n'
-            'Answer instruction: Answer with a whole number.\n'
-            '\n'
-            'End your response with a final line in exactly this format:\n'
-            'FINAL ANSWER: <answer>',
-  'answer': '2',
-  'meta': {'k': 2,
-           'category': 'books',
-           'distractor_types': ['code', 'probability'],
-           'distractor_chars': 164}}]
+           'steps': 6,
+           'ops': ['/', '*', '%', '+', '*', '-'],
+           'params': {'s': 4, 'g': 240, 'big': 45, 'pct': 25, 'm': 8, 'stock': 8383}}}]
 
 
 def _caching_state():
@@ -682,7 +554,7 @@ def _records(runs):
     return out
 
 
-@kbench.task(name="dial-calibration", description="Reasoning Dial calibration (private): calibration items at none and high.")
+@kbench.task(name="dial-calibration", description="Reasoning Dial calibration (private): Deduce and Arith calibration items at none and high.")
 def dial_task(llm) -> float:
     items = _select_items()
     if not items:

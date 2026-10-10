@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC = Path(__file__).resolve().parent
 TEMPLATE = SRC / "task_template.py.txt"
 PARSER = SRC / "parse.py"
-CALIBRATION_ITEMS = ROOT / "data" / "calibration_items.json"
+CALIBRATION_ITEMS = ROOT / "data" / "calibration_items_seed1002.json"  # calibration 2 (retuned)
 TEST_ITEMS = ROOT / "data" / "test_items.json"
 TASKS_DIR = ROOT / "tasks"
 
@@ -25,7 +25,7 @@ DESCRIPTION = (
     "Reasoning Dial: accuracy, output tokens and cost at one reasoning-effort level "
     "(see task name) on three seeded task families: Deduce, Arith, Distract."
 )
-CALIBRATION_DESCRIPTION = "Reasoning Dial calibration (private): calibration items at none and high."
+CALIBRATION_DESCRIPTION = "Reasoning Dial calibration (private): Deduce and Arith calibration items at none and high."
 
 
 def _items_block(items) -> str:
@@ -72,7 +72,7 @@ def build() -> list[Path]:
         raise FileNotFoundError(f"{CALIBRATION_ITEMS} missing; run dial.generate first")
     path = TASKS_DIR / "dial_calibration.py"
     path.write_text(render(name="dial-calibration", description=CALIBRATION_DESCRIPTION,
-                           levels=["none", "high"], r=1, cache_probe=True, items=cal),
+                           levels=["none", "high"], r=1, cache_probe=False, items=cal),
                     encoding="utf-8", newline="\n")
     written.append(path)
     return written

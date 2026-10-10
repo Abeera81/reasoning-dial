@@ -71,6 +71,24 @@ def test_marker_without_value_is_format_fail():
     assert r["lenient_parsed"] == 42
 
 
+@pytest.mark.parametrize("raw, want", [
+    ("Ben\n\nFINAL ANSWER:", "Ben"),                 # calibration case (gpt-oss-120b)
+    ("Gus\nFINAL ANSWER:", "Gus"),
+    ("Thursday is **Cleo**.\n\nFINAL ANSWER:  ", "Cleo"),
+    ("So it is Ben.\n**FINAL ANSWER:**", "Ben"),
+    ("Ana then Ben\n\nFINAL ANSWER:", None),          # two names on that line -> unparseable
+    ("FINAL ANSWER:", None),                          # nothing before the marker
+])
+def test_empty_marker_uses_line_before(raw, want):
+    assert p_name(raw)["parsed"] == want
+
+
+def test_empty_marker_int():
+    raw = "That's a total of five tools, 5 in all.\n\nFINAL ANSWER:"
+    assert p_int(raw)["parsed"] == 5
+    assert p_int("FINAL ANSWER: 3\nlater: 7\nFINAL ANSWER:")["parsed"] == 7   # last marker governs
+
+
 def test_empty_and_none():
     assert p_int("")["parsed"] is None
     assert p_int(None)["lenient_parsed"] is None

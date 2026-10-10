@@ -75,11 +75,12 @@ def test_calibration_config_and_items():
     src = CAL_FILE.read_text(encoding="utf-8")
     assert 'LEVELS = ["none", "high"]' in src
     assert re.search(r"^R = 1$", src, re.M)
-    assert re.search(r"^CACHE_PROBE = True$", src, re.M)
+    assert re.search(r"^CACHE_PROBE = False$", src, re.M)
     tree = ast.parse(src)
     items = next(ast.literal_eval(n.value) for n in tree.body
                  if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "ITEMS")
-    assert items == json.loads((ROOT / "data" / "calibration_items.json").read_text(encoding="utf-8"))
+    assert items == json.loads((ROOT / "data" / "calibration_items_seed1002.json").read_text(encoding="utf-8"))
+    assert {it["family"] for it in items} == {"deduce", "arith"}
 
 
 def test_dial_config():

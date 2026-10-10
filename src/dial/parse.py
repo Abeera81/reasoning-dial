@@ -60,7 +60,16 @@ def parse(raw: str, answer_type: str, known_names: list[str]) -> dict:
     last non-empty visible line (secondary accuracy only)."""
     visible = strip_think(raw or "")
     markers = list(_MARKER.finditer(visible))
-    parsed = normalize(markers[-1].group(1), answer_type, known_names) if markers else None
+    parsed = None
+    if markers:
+        last = markers[-1]
+        value = last.group(1)
+        if not _clean(value):
+            # Empty marker: use the last non-empty line before it (rule added 2026-10-10,
+            # before the lock, after calibration showed "Ben\n\nFINAL ANSWER:").
+            before = [ln for ln in visible[: last.start()].splitlines() if _clean(ln)]
+            value = before[-1] if before else None
+        parsed = normalize(value, answer_type, known_names)
     lenient = parsed
     if lenient is None:
         lines = [ln for ln in visible.splitlines() if ln.strip()]
