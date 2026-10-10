@@ -20,7 +20,7 @@ TEST_ITEMS = ROOT / "data" / "test_items.json"
 TASKS_DIR = ROOT / "tasks"
 
 DIAL_LEVELS = ["none", "low", "medium", "high"]
-DIAL_R = 3
+DIAL_R = 2  # Tech Design §7 cut step 1 (R 3 -> 2), decided 2026-10-10 before lock
 DESCRIPTION = (
     "Reasoning Dial: accuracy, output tokens and cost at one reasoning-effort level "
     "(see task name) on three seeded task families: Deduce, Arith, Distract."

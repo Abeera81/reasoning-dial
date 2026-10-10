@@ -86,7 +86,7 @@ def test_calibration_config_and_items():
 def test_dial_config():
     for path in DIAL_FILES.values():
         src = path.read_text(encoding="utf-8")
-        assert re.search(r"^R = 3$", src, re.M)
+        assert re.search(r"^R = 2$", src, re.M)
         assert re.search(r"^CACHE_PROBE = False$", src, re.M)
         assert "temperature" not in src and "schema=" not in src
         if not (ROOT / "data" / "test_items.json").exists():
