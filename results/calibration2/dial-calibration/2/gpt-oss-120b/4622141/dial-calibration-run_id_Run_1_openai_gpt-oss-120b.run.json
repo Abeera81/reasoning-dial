@@ -1,0 +1,2560 @@
+{
+  "taskVersion": {
+    "versionNumber": 1,
+    "name": "dial-calibration",
+    "description": "Reasoning Dial calibration (private): Deduce and Arith calibration items at none and high.",
+    "definition": "@kbench.task(name=\"dial-calibration\", description=\"Reasoning Dial calibration (private): Deduce and Arith calibration items at none and high.\")\ndef dial_task(llm) -> float:\n    items = _select_items()\n    if not items:\n        raise RuntimeError(\"No items inlined in this task file yet (test items are inlined at M4).\")\n    df = pd.DataFrame(_rows(items, LEVELS, R))\n    records = _records(dial_call.evaluate(\n        llm=[llm], evaluation_data=df, n_jobs=N_JOBS, on_failure=\"continue\"))\n    if CACHE_PROBE:\n        # Two items, each sent twice at \"none\" with identical requests, sequentially,\n        # so a cached first reply would be returned for the second.\n        probe_items = items[:2]\n        probe_df = pd.DataFrame(_rows(probe_items, [\"none\"], 1, probe=1)\n                                + _rows(probe_items, [\"none\"], 1, probe=2))\n        probe_records = _records(dial_call.evaluate(\n            llm=[llm], evaluation_data=probe_df, n_jobs=1, on_failure=\"continue\"))\n        for it in probe_items:\n            texts = [r.get(\"raw\") for r in probe_records if r.get(\"item_id\") == it[\"id\"]]\n            print(f\"[cache-probe] {it['id']}: byte_identical={len(set(texts)) == 1} \"\n                  f\"caching={CACHING}\")\n        records += probe_records\n    graded = [r for r in records if r.get(\"probe\") == 0 and r[\"outcome\"] in (\"correct\", \"wrong\", \"format_fail\")]\n    acc = sum(r[\"outcome\"] == \"correct\" for r in graded) / len(graded) if graded else 0.0\n    counts = {}\n    for r in records:\n        counts[r[\"outcome\"]] = counts.get(r[\"outcome\"], 0) + 1\n    print(f\"[dial] levels={LEVELS} R={R} items={len(items)} calls={len(records)} \"\n          f\"outcomes={counts} primary_accuracy={acc:.3f} caching={CACHING}\")\n    return float(acc)\n"
+  },
+  "modelVersion": {
+    "slug": "openai/gpt-oss-120b"
+  },
+  "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+  "startTime": "2026-10-10T04:25:53.557982Z",
+  "endTime": "2026-10-10T04:30:59.862293Z",
+  "conversations": [
+    {
+      "id": "dial-calibration-1cfa9bc9",
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    }
+  ],
+  "results": [
+    {
+      "type": "AGGREGATED",
+      "numericResult": {
+        "value": 0.9375
+      }
+    }
+  ],
+  "subruns": [
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.582020Z",
+      "endTime": "2026-10-10T04:25:53.888193Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-7ea8bcb8",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "deduce-006|none|r0-e2380932",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Seven people, Ana, Ben, Cleo, Dev, Eli, Fay and Gus, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Ana gives the talk on an earlier day than Fay.\n2. Fay gives the talk on the day immediately before Ben.\n3. Eli gives the talk on the day immediately before Dev.\n4. Cleo does not give the talk on Monday.\n5. Gus gives the talk on an earlier day than Eli.\n6. Cleo gives the talk on the day immediately before Gus.\n7. Ana and Cleo do not give their talks on consecutive days.\n\nQuestion: Who gives the talk on Tuesday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "deduce-006|none|r0-e2380932-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": null,
+            "backend_latency_ms": null,
+            "item_id": "deduce-006",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "api_error",
+            "lenient_parsed": null,
+            "raw": null,
+            "output_tokens": null,
+            "caching": "False",
+            "latency_s": 0.306,
+            "level": "none",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '[{\"error\":{\"code\":400,\"message\":\"Expected \\'reasoning_effort\\' to be one of: \\'high\\', \\'low\\', \\'max\\', \\'medium\\', \\'minimal\\'; found \\'none\\'.\",\"status\":\"INVALID_ARGUMENT\"}}]', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "family": "deduce",
+            "trace_chars": null,
+            "expected": "Fay",
+            "cost_nanodollars": null
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #7"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.574921Z",
+      "endTime": "2026-10-10T04:25:53.892724Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-55b1b732",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "deduce-000|none|r0-17dacad2",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Seven people, Ana, Ben, Cleo, Dev, Fay, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Dev gives the talk on an earlier day than Gus.\n2. Ana and Gus do not give their talks on consecutive days.\n3. Fay does not give the talk on Saturday.\n4. Ana gives the talk on the day immediately before Cleo.\n5. Hana gives the talk on an earlier day than Fay.\n6. Ben gives the talk on an earlier day than Hana.\n7. Dev gives the talk on the day immediately before Fay.\n\nQuestion: Who gives the talk on Friday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "deduce-000|none|r0-17dacad2-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": null,
+            "backend_latency_ms": null,
+            "item_id": "deduce-000",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "api_error",
+            "lenient_parsed": null,
+            "raw": null,
+            "output_tokens": null,
+            "caching": "False",
+            "latency_s": 0.318,
+            "level": "none",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '[{\"error\":{\"code\":400,\"message\":\"Expected \\'reasoning_effort\\' to be one of: \\'high\\', \\'low\\', \\'max\\', \\'medium\\', \\'minimal\\'; found \\'none\\'.\",\"status\":\"INVALID_ARGUMENT\"}}]', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "family": "deduce",
+            "trace_chars": null,
+            "expected": "Ana",
+            "cost_nanodollars": null
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #1"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.576261Z",
+      "endTime": "2026-10-10T04:25:53.902039Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-cf489a35",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "deduce-001|none|r0-4fc53fc9",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Seven people, Ana, Ben, Cleo, Dev, Eli, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Ben does not give the talk on Saturday.\n2. Hana gives the talk on an earlier day than Ben.\n3. Ana does not give the talk on Wednesday.\n4. Eli gives the talk on the day immediately before Ben.\n5. Cleo gives the talk on the day immediately before Hana.\n6. Dev gives the talk on an earlier day than Ana.\n7. Dev gives the talk on the day immediately before Gus.\n8. Dev gives the talk on an earlier day than Cleo.\n\nQuestion: Who gives the talk on Saturday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "deduce-001|none|r0-4fc53fc9-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": null,
+            "backend_latency_ms": null,
+            "item_id": "deduce-001",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "api_error",
+            "lenient_parsed": null,
+            "raw": null,
+            "output_tokens": null,
+            "caching": "False",
+            "latency_s": 0.326,
+            "level": "none",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '[{\"error\":{\"code\":400,\"message\":\"Expected \\'reasoning_effort\\' to be one of: \\'high\\', \\'low\\', \\'max\\', \\'medium\\', \\'minimal\\'; found \\'none\\'.\",\"status\":\"INVALID_ARGUMENT\"}}]', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "family": "deduce",
+            "trace_chars": null,
+            "expected": "Eli",
+            "cost_nanodollars": null
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #2"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.578191Z",
+      "endTime": "2026-10-10T04:25:53.909669Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-c2075508",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "deduce-003|none|r0-18e26eef",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Seven people, Ana, Ben, Cleo, Dev, Eli, Fay and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Cleo gives the talk on an earlier day than Hana.\n2. Ben and Ana do not give their talks on consecutive days.\n3. Ben does not give the talk on Tuesday.\n4. Ben gives the talk on an earlier day than Cleo.\n5. Ana gives the talk on the day immediately before Cleo.\n6. Eli gives the talk on an earlier day than Dev.\n7. Fay gives the talk on an earlier day than Ben.\n8. Fay does not give the talk on Tuesday.\n\nQuestion: Who gives the talk on Friday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "deduce-003|none|r0-18e26eef-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": null,
+            "backend_latency_ms": null,
+            "item_id": "deduce-003",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "api_error",
+            "lenient_parsed": null,
+            "raw": null,
+            "output_tokens": null,
+            "caching": "False",
+            "latency_s": 0.331,
+            "level": "none",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '[{\"error\":{\"code\":400,\"message\":\"Expected \\'reasoning_effort\\' to be one of: \\'high\\', \\'low\\', \\'max\\', \\'medium\\', \\'minimal\\'; found \\'none\\'.\",\"status\":\"INVALID_ARGUMENT\"}}]', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "family": "deduce",
+            "trace_chars": null,
+            "expected": "Ana",
+            "cost_nanodollars": null
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #4"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.577487Z",
+      "endTime": "2026-10-10T04:25:53.919175Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-6612ea7b",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "deduce-002|none|r0-171fdc7b",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Seven people, Ana, Cleo, Dev, Eli, Fay, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Gus gives the talk on the day immediately before Fay.\n2. Cleo and Ana do not give their talks on consecutive days.\n3. Hana gives the talk on the day immediately before Eli.\n4. Eli does not give the talk on Wednesday.\n5. Ana does not give the talk on Wednesday.\n6. Eli gives the talk on an earlier day than Dev.\n7. Ana gives the talk on the day immediately before Hana.\n\nQuestion: Who gives the talk on Wednesday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "deduce-002|none|r0-171fdc7b-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": null,
+            "backend_latency_ms": null,
+            "item_id": "deduce-002",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "api_error",
+            "lenient_parsed": null,
+            "raw": null,
+            "output_tokens": null,
+            "caching": "False",
+            "latency_s": 0.34,
+            "level": "none",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '[{\"error\":{\"code\":400,\"message\":\"Expected \\'reasoning_effort\\' to be one of: \\'high\\', \\'low\\', \\'max\\', \\'medium\\', \\'minimal\\'; found \\'none\\'.\",\"status\":\"INVALID_ARGUMENT\"}}]', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "family": "deduce",
+            "trace_chars": null,
+            "expected": "Fay",
+            "cost_nanodollars": null
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #3"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.582427Z",
+      "endTime": "2026-10-10T04:25:53.922835Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-fa4da7e2",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "deduce-007|none|r0-243feee1",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Seven people, Ana, Cleo, Dev, Eli, Fay, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Eli and Fay do not give their talks on consecutive days.\n2. Ana and Fay do not give their talks on consecutive days.\n3. Ana and Eli do not give their talks on consecutive days.\n4. Eli gives the talk on the day immediately before Dev.\n5. Dev gives the talk on the day immediately before Gus.\n6. Hana gives the talk on the day immediately before Cleo.\n7. Ana gives the talk on an earlier day than Eli.\n\nQuestion: Who gives the talk on Thursday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "deduce-007|none|r0-243feee1-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": null,
+            "backend_latency_ms": null,
+            "item_id": "deduce-007",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "api_error",
+            "lenient_parsed": null,
+            "raw": null,
+            "output_tokens": null,
+            "caching": "False",
+            "latency_s": 0.34,
+            "level": "none",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '[{\"error\":{\"code\":400,\"message\":\"Expected \\'reasoning_effort\\' to be one of: \\'high\\', \\'low\\', \\'max\\', \\'medium\\', \\'minimal\\'; found \\'none\\'.\",\"status\":\"INVALID_ARGUMENT\"}}]', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "family": "deduce",
+            "trace_chars": null,
+            "expected": "Eli",
+            "cost_nanodollars": null
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #8"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.581216Z",
+      "endTime": "2026-10-10T04:25:53.926960Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-72b79009",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "deduce-005|none|r0-d0a651bb",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Seven people, Ana, Ben, Dev, Eli, Fay, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Dev gives the talk on an earlier day than Ana.\n2. Gus gives the talk on the day immediately before Ana.\n3. Ana and Eli do not give their talks on consecutive days.\n4. Gus gives the talk on an earlier day than Hana.\n5. Ben gives the talk on an earlier day than Dev.\n6. Ana does not give the talk on Friday.\n7. Ana and Hana do not give their talks on consecutive days.\n8. Hana does not give the talk on Saturday.\n\nQuestion: Who gives the talk on Tuesday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "deduce-005|none|r0-d0a651bb-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": null,
+            "backend_latency_ms": null,
+            "item_id": "deduce-005",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "api_error",
+            "lenient_parsed": null,
+            "raw": null,
+            "output_tokens": null,
+            "caching": "False",
+            "latency_s": 0.346,
+            "level": "none",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '[{\"error\":{\"code\":400,\"message\":\"Expected \\'reasoning_effort\\' to be one of: \\'high\\', \\'low\\', \\'max\\', \\'medium\\', \\'minimal\\'; found \\'none\\'.\",\"status\":\"INVALID_ARGUMENT\"}}]', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "family": "deduce",
+            "trace_chars": null,
+            "expected": "Dev",
+            "cost_nanodollars": null
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #6"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.580642Z",
+      "endTime": "2026-10-10T04:25:53.937873Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-230425ab",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "deduce-004|none|r0-483d6e6b",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Seven people, Ana, Ben, Cleo, Dev, Eli, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Ana and Cleo do not give their talks on consecutive days.\n2. Cleo and Eli do not give their talks on consecutive days.\n3. Ana gives the talk on an earlier day than Dev.\n4. Ana does not give the talk on Tuesday.\n5. Gus gives the talk on an earlier day than Ben.\n6. Hana gives the talk on the day immediately before Ben.\n7. Gus and Eli do not give their talks on consecutive days.\n8. Gus and Cleo do not give their talks on consecutive days.\n9. Cleo gives the talk on an earlier day than Dev.\n\nQuestion: Who gives the talk on Wednesday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "deduce-004|none|r0-483d6e6b-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": null,
+            "backend_latency_ms": null,
+            "item_id": "deduce-004",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "api_error",
+            "lenient_parsed": null,
+            "raw": null,
+            "output_tokens": null,
+            "caching": "False",
+            "latency_s": 0.354,
+            "level": "none",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '[{\"error\":{\"code\":400,\"message\":\"Expected \\'reasoning_effort\\' to be one of: \\'high\\', \\'low\\', \\'max\\', \\'medium\\', \\'minimal\\'; found \\'none\\'.\",\"status\":\"INVALID_ARGUMENT\"}}]', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "family": "deduce",
+            "trace_chars": null,
+            "expected": "Hana",
+            "cost_nanodollars": null
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #5"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.893072Z",
+      "endTime": "2026-10-10T04:25:53.992420Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-94ae514d",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "arith-001|none|r0-d1061c3f",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A courier drives for 6 hours at 90 km/h, then drives another 204 km. The van uses one litre of fuel for every 12 km. Fuel costs 320 rupees per litre, and a fuel tax adds 25% to the fuel cost. How many rupees does the fuel for the whole trip cost, including the tax?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "arith-001|none|r0-d1061c3f-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": null,
+            "backend_latency_ms": null,
+            "item_id": "arith-001",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "api_error",
+            "lenient_parsed": null,
+            "raw": null,
+            "output_tokens": null,
+            "caching": "False",
+            "latency_s": 0.099,
+            "level": "none",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '[{\"error\":{\"code\":400,\"message\":\"Expected \\'reasoning_effort\\' to be one of: \\'high\\', \\'low\\', \\'max\\', \\'medium\\', \\'minimal\\'; found \\'none\\'.\",\"status\":\"INVALID_ARGUMENT\"}}]', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "family": "arith",
+            "trace_chars": null,
+            "expected": "24800",
+            "cost_nanodollars": null
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #10"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.910007Z",
+      "endTime": "2026-10-10T04:25:54.004576Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-d45ca9e7",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "arith-003|none|r0-e94e29c8",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A recipe for 6 servings uses 432 grams of flour. A bakery makes 6 batches, and each batch is 45 servings. In every batch an extra 5% of that batch's recipe flour is lost to spills, so it has to be added on top. The bakery already has 2408 grams of flour in stock. How many more grams of flour does the bakery need to buy?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "arith-003|none|r0-e94e29c8-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": null,
+            "backend_latency_ms": null,
+            "item_id": "arith-003",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "api_error",
+            "lenient_parsed": null,
+            "raw": null,
+            "output_tokens": null,
+            "caching": "False",
+            "latency_s": 0.094,
+            "level": "none",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '[{\"error\":{\"code\":400,\"message\":\"Expected \\'reasoning_effort\\' to be one of: \\'high\\', \\'low\\', \\'max\\', \\'medium\\', \\'minimal\\'; found \\'none\\'.\",\"status\":\"INVALID_ARGUMENT\"}}]', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "family": "arith",
+            "trace_chars": null,
+            "expected": "18004",
+            "cost_nanodollars": null
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #12"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.902475Z",
+      "endTime": "2026-10-10T04:25:54.009024Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-913fa241",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "arith-002|none|r0-83900034",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Maya earns 1160 dollars per week for 27 weeks. She spends 20% of her total earnings on rent. Then she buys 10 books at 105 dollars each. She splits the money she has left equally into 6 envelopes. How many dollars go into each envelope?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "arith-002|none|r0-83900034-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": null,
+            "backend_latency_ms": null,
+            "item_id": "arith-002",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "api_error",
+            "lenient_parsed": null,
+            "raw": null,
+            "output_tokens": null,
+            "caching": "False",
+            "latency_s": 0.106,
+            "level": "none",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '[{\"error\":{\"code\":400,\"message\":\"Expected \\'reasoning_effort\\' to be one of: \\'high\\', \\'low\\', \\'max\\', \\'medium\\', \\'minimal\\'; found \\'none\\'.\",\"status\":\"INVALID_ARGUMENT\"}}]', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "family": "arith",
+            "trace_chars": null,
+            "expected": "4001",
+            "cost_nanodollars": null
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #11"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.888518Z",
+      "endTime": "2026-10-10T04:25:54.032238Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-e8b445d6",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "arith-000|none|r0-35441e9d",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A warehouse holds 5382 boxes. A truck then delivers 6 loads of 13 boxes each. All the boxes in the warehouse are then split equally among 7 stores. Each store sells 10% of the boxes it received. How many unsold boxes do the 7 stores have in total?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "arith-000|none|r0-35441e9d-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": null,
+            "backend_latency_ms": null,
+            "item_id": "arith-000",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "api_error",
+            "lenient_parsed": null,
+            "raw": null,
+            "output_tokens": null,
+            "caching": "False",
+            "latency_s": 0.142,
+            "level": "none",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '[{\"error\":{\"code\":400,\"message\":\"Expected \\'reasoning_effort\\' to be one of: \\'high\\', \\'low\\', \\'max\\', \\'medium\\', \\'minimal\\'; found \\'none\\'.\",\"status\":\"INVALID_ARGUMENT\"}}]', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "family": "arith",
+            "trace_chars": null,
+            "expected": "4914",
+            "cost_nanodollars": null
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #9"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.919545Z",
+      "endTime": "2026-10-10T04:25:54.041875Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-b8605172",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "arith-004|none|r0-e1e996a1",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A warehouse holds 6348 boxes. A truck then delivers 6 loads of 22 boxes each. All the boxes in the warehouse are then split equally among 6 stores. Each store sells 40% of the boxes it received. How many unsold boxes do the 6 stores have in total?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "arith-004|none|r0-e1e996a1-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": null,
+            "backend_latency_ms": null,
+            "item_id": "arith-004",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "api_error",
+            "lenient_parsed": null,
+            "raw": null,
+            "output_tokens": null,
+            "caching": "False",
+            "latency_s": 0.122,
+            "level": "none",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '[{\"error\":{\"code\":400,\"message\":\"Expected \\'reasoning_effort\\' to be one of: \\'high\\', \\'low\\', \\'max\\', \\'medium\\', \\'minimal\\'; found \\'none\\'.\",\"status\":\"INVALID_ARGUMENT\"}}]', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "family": "arith",
+            "trace_chars": null,
+            "expected": "3888",
+            "cost_nanodollars": null
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #13"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.923218Z",
+      "endTime": "2026-10-10T04:25:54.050433Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-cf788398",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "arith-005|none|r0-981238e1",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A courier drives for 4 hours at 75 km/h, then drives another 134 km. The van uses one litre of fuel for every 14 km. Fuel costs 340 rupees per litre, and a fuel tax adds 15% to the fuel cost. How many rupees does the fuel for the whole trip cost, including the tax?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "arith-005|none|r0-981238e1-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": null,
+            "backend_latency_ms": null,
+            "item_id": "arith-005",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "api_error",
+            "lenient_parsed": null,
+            "raw": null,
+            "output_tokens": null,
+            "caching": "False",
+            "latency_s": 0.127,
+            "level": "none",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '[{\"error\":{\"code\":400,\"message\":\"Expected \\'reasoning_effort\\' to be one of: \\'high\\', \\'low\\', \\'max\\', \\'medium\\', \\'minimal\\'; found \\'none\\'.\",\"status\":\"INVALID_ARGUMENT\"}}]', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "family": "arith",
+            "trace_chars": null,
+            "expected": "12121",
+            "cost_nanodollars": null
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #14"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.927354Z",
+      "endTime": "2026-10-10T04:25:55.831944Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-c6342e75",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "arith-006|none|r0-ca68cf45",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Maya earns 520 dollars per week for 18 weeks. She spends 40% of her total earnings on rent. Then she buys 8 books at 48 dollars each. She splits the money she has left equally into 4 envelopes. How many dollars go into each envelope?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "arith-006|none|r0-ca68cf45-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": null,
+            "backend_latency_ms": null,
+            "item_id": "arith-006",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "api_error",
+            "lenient_parsed": null,
+            "raw": null,
+            "output_tokens": null,
+            "caching": "False",
+            "latency_s": 1.904,
+            "level": "none",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '[{\"error\":{\"code\":400,\"message\":\"Expected \\'reasoning_effort\\' to be one of: \\'high\\', \\'low\\', \\'max\\', \\'medium\\', \\'minimal\\'; found \\'none\\'.\",\"status\":\"INVALID_ARGUMENT\"}}]', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "family": "arith",
+            "trace_chars": null,
+            "expected": "1308",
+            "cost_nanodollars": null
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #15"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.938356Z",
+      "endTime": "2026-10-10T04:25:59.829943Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-233e6623",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "arith-007|none|r0-b3eaee46",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A recipe for 4 servings uses 240 grams of flour. A bakery makes 8 batches, and each batch is 45 servings. In every batch an extra 25% of that batch's recipe flour is lost to spills, so it has to be added on top. The bakery already has 8383 grams of flour in stock. How many more grams of flour does the bakery need to buy?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "arith-007|none|r0-b3eaee46-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": null,
+            "backend_latency_ms": null,
+            "item_id": "arith-007",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "api_error",
+            "lenient_parsed": null,
+            "raw": null,
+            "output_tokens": null,
+            "caching": "False",
+            "latency_s": 5.891,
+            "level": "none",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '[{\"error\":{\"code\":400,\"message\":\"Expected \\'reasoning_effort\\' to be one of: \\'high\\', \\'low\\', \\'max\\', \\'medium\\', \\'minimal\\'; found \\'none\\'.\",\"status\":\"INVALID_ARGUMENT\"}}]', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "family": "arith",
+            "trace_chars": null,
+            "expected": "18617",
+            "cost_nanodollars": null
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #16"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:53.992806Z",
+      "endTime": "2026-10-10T04:26:28.541749Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-e84459f5",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "deduce-000|high|r0-69c9aedc",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Seven people, Ana, Ben, Cleo, Dev, Fay, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Dev gives the talk on an earlier day than Gus.\n2. Ana and Gus do not give their talks on consecutive days.\n3. Fay does not give the talk on Saturday.\n4. Ana gives the talk on the day immediately before Cleo.\n5. Hana gives the talk on an earlier day than Fay.\n6. Ben gives the talk on an earlier day than Hana.\n7. Dev gives the talk on the day immediately before Fay.\n\nQuestion: Who gives the talk on Friday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "Ana  \nFINAL ANSWER: Ana"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "openai/gpt-oss-120b"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 240,
+                "outputTokens": 5765,
+                "inputTokensCostNanodollars": "21600",
+                "outputTokensCostNanodollars": "2075400",
+                "totalBackendLatencyMs": "24699"
+              },
+              "id": "deduce-000|high|r0-69c9aedc-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 240,
+            "outputTokens": 5765,
+            "inputTokensCostNanodollars": "21600",
+            "outputTokensCostNanodollars": "2075400",
+            "totalBackendLatencyMs": "24699"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": "Ana",
+            "backend_latency_ms": 24699.0,
+            "item_id": "deduce-000",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "correct",
+            "lenient_parsed": "Ana",
+            "raw": "Ana  \nFINAL ANSWER: Ana",
+            "output_tokens": 5765.0,
+            "caching": "False",
+            "latency_s": 34.545,
+            "level": "high",
+            "error": null,
+            "input_tokens": 240.0,
+            "family": "deduce",
+            "trace_chars": 0.0,
+            "expected": "Ana",
+            "cost_nanodollars": 2097000.0
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #17"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:54.009366Z",
+      "endTime": "2026-10-10T04:26:29.271622Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-a7a918dd",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "deduce-002|high|r0-9ebda59b",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Seven people, Ana, Cleo, Dev, Eli, Fay, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Gus gives the talk on the day immediately before Fay.\n2. Cleo and Ana do not give their talks on consecutive days.\n3. Hana gives the talk on the day immediately before Eli.\n4. Eli does not give the talk on Wednesday.\n5. Ana does not give the talk on Wednesday.\n6. Eli gives the talk on an earlier day than Dev.\n7. Ana gives the talk on the day immediately before Hana.\n\nQuestion: Who gives the talk on Wednesday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "Fay  \nFINAL ANSWER: Fay"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "openai/gpt-oss-120b"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 238,
+                "outputTokens": 3801,
+                "inputTokensCostNanodollars": "21420",
+                "outputTokensCostNanodollars": "1368360",
+                "totalBackendLatencyMs": "16911"
+              },
+              "id": "deduce-002|high|r0-9ebda59b-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 238,
+            "outputTokens": 3801,
+            "inputTokensCostNanodollars": "21420",
+            "outputTokensCostNanodollars": "1368360",
+            "totalBackendLatencyMs": "16911"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": "Fay",
+            "backend_latency_ms": 16911.0,
+            "item_id": "deduce-002",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "correct",
+            "lenient_parsed": "Fay",
+            "raw": "Fay  \nFINAL ANSWER: Fay",
+            "output_tokens": 3801.0,
+            "caching": "False",
+            "latency_s": 35.262,
+            "level": "high",
+            "error": null,
+            "input_tokens": 238.0,
+            "family": "deduce",
+            "trace_chars": 0.0,
+            "expected": "Fay",
+            "cost_nanodollars": 1389780.0
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #19"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:54.032666Z",
+      "endTime": "2026-10-10T04:26:32.194847Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-a9c6bbb2",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "deduce-003|high|r0-558e98dc",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Seven people, Ana, Ben, Cleo, Dev, Eli, Fay and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Cleo gives the talk on an earlier day than Hana.\n2. Ben and Ana do not give their talks on consecutive days.\n3. Ben does not give the talk on Tuesday.\n4. Ben gives the talk on an earlier day than Cleo.\n5. Ana gives the talk on the day immediately before Cleo.\n6. Eli gives the talk on an earlier day than Dev.\n7. Fay gives the talk on an earlier day than Ben.\n8. Fay does not give the talk on Tuesday.\n\nQuestion: Who gives the talk on Friday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "FINAL ANSWER: Ana"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "openai/gpt-oss-120b"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 253,
+                "outputTokens": 3784,
+                "inputTokensCostNanodollars": "22770",
+                "outputTokensCostNanodollars": "1362240",
+                "totalBackendLatencyMs": "16015"
+              },
+              "id": "deduce-003|high|r0-558e98dc-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 253,
+            "outputTokens": 3784,
+            "inputTokensCostNanodollars": "22770",
+            "outputTokensCostNanodollars": "1362240",
+            "totalBackendLatencyMs": "16015"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": "Ana",
+            "backend_latency_ms": 16015.0,
+            "item_id": "deduce-003",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "correct",
+            "lenient_parsed": "Ana",
+            "raw": "FINAL ANSWER: Ana",
+            "output_tokens": 3784.0,
+            "caching": "False",
+            "latency_s": 38.162,
+            "level": "high",
+            "error": null,
+            "input_tokens": 253.0,
+            "family": "deduce",
+            "trace_chars": 0.0,
+            "expected": "Ana",
+            "cost_nanodollars": 1385010.0
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #20"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:54.050821Z",
+      "endTime": "2026-10-10T04:26:38.894284Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-84cb2bd5",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "deduce-005|high|r0-9cf707b6",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Seven people, Ana, Ben, Dev, Eli, Fay, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Dev gives the talk on an earlier day than Ana.\n2. Gus gives the talk on the day immediately before Ana.\n3. Ana and Eli do not give their talks on consecutive days.\n4. Gus gives the talk on an earlier day than Hana.\n5. Ben gives the talk on an earlier day than Dev.\n6. Ana does not give the talk on Friday.\n7. Ana and Hana do not give their talks on consecutive days.\n8. Hana does not give the talk on Saturday.\n\nQuestion: Who gives the talk on Tuesday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "Dev  \nFINAL ANSWER: Dev"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "openai/gpt-oss-120b"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 250,
+                "outputTokens": 3506,
+                "inputTokensCostNanodollars": "22500",
+                "outputTokensCostNanodollars": "1262160",
+                "totalBackendLatencyMs": "14397"
+              },
+              "id": "deduce-005|high|r0-9cf707b6-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 250,
+            "outputTokens": 3506,
+            "inputTokensCostNanodollars": "22500",
+            "outputTokensCostNanodollars": "1262160",
+            "totalBackendLatencyMs": "14397"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": "Dev",
+            "backend_latency_ms": 14397.0,
+            "item_id": "deduce-005",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "correct",
+            "lenient_parsed": "Dev",
+            "raw": "Dev  \nFINAL ANSWER: Dev",
+            "output_tokens": 3506.0,
+            "caching": "False",
+            "latency_s": 44.843,
+            "level": "high",
+            "error": null,
+            "input_tokens": 250.0,
+            "family": "deduce",
+            "trace_chars": 0.0,
+            "expected": "Dev",
+            "cost_nanodollars": 1284660.0
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #22"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:26:28.542238Z",
+      "endTime": "2026-10-10T04:26:40.448439Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-3f173baf",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "arith-000|high|r0-f81e2f68",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A warehouse holds 5382 boxes. A truck then delivers 6 loads of 13 boxes each. All the boxes in the warehouse are then split equally among 7 stores. Each store sells 10% of the boxes it received. How many unsold boxes do the 7 stores have in total?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "The truck adds \\(6 \\times 13 = 78\\) boxes, giving the warehouse \\(5382 + 78 = 5460\\) boxes.\n\nThese are split equally among 7 stores:\n\\[\n\\frac{5460}{7} = 780 \\text{ boxes per store}.\n\\]\n\nEach store sells 10% of its boxes:\n\\[\n0.10 \\times 780 = 78 \\text{ boxes sold per store}.\n\\]\n\nUnsold per store:\n\\[\n780 - 78 = 702 \\text{ boxes}.\n\\]\n\nTotal unsold across all 7 stores:\n\\[\n7 \\times 702 = 4914.\n\\]\n\n**Answer:** 4914 unsold boxes.\n\nFINAL ANSWER: 4914"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "openai/gpt-oss-120b"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 157,
+                "outputTokens": 667,
+                "inputTokensCostNanodollars": "14130",
+                "outputTokensCostNanodollars": "240120",
+                "totalBackendLatencyMs": "3477"
+              },
+              "id": "arith-000|high|r0-f81e2f68-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 157,
+            "outputTokens": 667,
+            "inputTokensCostNanodollars": "14130",
+            "outputTokensCostNanodollars": "240120",
+            "totalBackendLatencyMs": "3477"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": "4914",
+            "backend_latency_ms": 3477.0,
+            "item_id": "arith-000",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "correct",
+            "lenient_parsed": "4914",
+            "raw": "The truck adds \\(6 \\times 13 = 78\\) boxes, giving the warehouse \\(5382 + 78 = 5460\\) boxes.\n\nThese are split equally among 7 stores:\n\\[\n\\frac{5460}{7} = 780 \\text{ boxes per store}.\n\\]\n\nEach store sells 10% of its boxes:\n\\[\n0.10 \\times 780 = 78 \\text{ boxes sold per store}.\n\\]\n\nUnsold per store:\n\\[\n780 - 78 = 702 \\text{ boxes}.\n\\]\n\nTotal unsold across all 7 stores:\n\\[\n7 \\times 702 = 4914.\n\\]\n\n**Answer:** 4914 unsold boxes.\n\nFINAL ANSWER: 4914",
+            "output_tokens": 667.0,
+            "caching": "False",
+            "latency_s": 11.906,
+            "level": "high",
+            "error": null,
+            "input_tokens": 157.0,
+            "family": "arith",
+            "trace_chars": 0.0,
+            "expected": "4914",
+            "cost_nanodollars": 254250.0
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #25"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:26:29.271974Z",
+      "endTime": "2026-10-10T04:26:42.068210Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-a1b84d32",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "arith-001|high|r0-6296163d",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A courier drives for 6 hours at 90 km/h, then drives another 204 km. The van uses one litre of fuel for every 12 km. Fuel costs 320 rupees per litre, and a fuel tax adds 25% to the fuel cost. How many rupees does the fuel for the whole trip cost, including the tax?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "The courier travels:\n\n- First part: \\(90\\text{ km/h} \\times 6\\text{ h} = 540\\text{ km}\\)\n- Second part: \\(204\\text{ km}\\)\n\nTotal distance: \\(540 + 204 = 744\\text{ km}\\).\n\nFuel consumption is \\(1\\) litre per \\(12\\) km, so the required fuel is  \n\\[\n\\frac{744\\text{ km}}{12\\text{ km/litre}} = 62\\text{ litres}.\n\\]\n\nCost per litre is \u20b9320, giving a base fuel cost of  \n\\[\n62 \\times 320 = \u20b919\\,840.\n\\]\n\nA fuel tax adds 25\u202f% to this cost:  \n\\[\n19\\,840 \\times 0.25 = \u20b94\\,960.\n\\]\n\nTotal cost including tax:  \n\\[\n19\\,840 + 4\\,960 = \u20b924\\,800.\n\\]\n\nHence the fuel for the whole trip costs \u20b924,800.\n\nFINAL ANSWER: 248"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "openai/gpt-oss-120b"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 171,
+                "outputTokens": 568,
+                "inputTokensCostNanodollars": "15390",
+                "outputTokensCostNanodollars": "204480",
+                "totalBackendLatencyMs": "1184"
+              },
+              "id": "arith-001|high|r0-6296163d-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 171,
+            "outputTokens": 568,
+            "inputTokensCostNanodollars": "15390",
+            "outputTokensCostNanodollars": "204480",
+            "totalBackendLatencyMs": "1184"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": "248",
+            "backend_latency_ms": 1184.0,
+            "item_id": "arith-001",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "wrong",
+            "lenient_parsed": "248",
+            "raw": "The courier travels:\n\n- First part: \\(90\\text{ km/h} \\times 6\\text{ h} = 540\\text{ km}\\)\n- Second part: \\(204\\text{ km}\\)\n\nTotal distance: \\(540 + 204 = 744\\text{ km}\\).\n\nFuel consumption is \\(1\\) litre per \\(12\\) km, so the required fuel is  \n\\[\n\\frac{744\\text{ km}}{12\\text{ km/litre}} = 62\\text{ litres}.\n\\]\n\nCost per litre is \u20b9320, giving a base fuel cost of  \n\\[\n62 \\times 320 = \u20b919\\,840.\n\\]\n\nA fuel tax adds 25\u202f% to this cost:  \n\\[\n19\\,840 \\times 0.25 = \u20b94\\,960.\n\\]\n\nTotal cost including tax:  \n\\[\n19\\,840 + 4\\,960 = \u20b924\\,800.\n\\]\n\nHence the fuel for the whole trip costs \u20b924,800.\n\nFINAL ANSWER: 248",
+            "output_tokens": 568.0,
+            "caching": "False",
+            "latency_s": 12.796,
+            "level": "high",
+            "error": null,
+            "input_tokens": 171.0,
+            "family": "arith",
+            "trace_chars": 0.0,
+            "expected": "24800",
+            "cost_nanodollars": 219870.0
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #26"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:54.005008Z",
+      "endTime": "2026-10-10T04:26:45.437955Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-c952ae66",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "deduce-001|high|r0-e73a0525",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Seven people, Ana, Ben, Cleo, Dev, Eli, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Ben does not give the talk on Saturday.\n2. Hana gives the talk on an earlier day than Ben.\n3. Ana does not give the talk on Wednesday.\n4. Eli gives the talk on the day immediately before Ben.\n5. Cleo gives the talk on the day immediately before Hana.\n6. Dev gives the talk on an earlier day than Ana.\n7. Dev gives the talk on the day immediately before Gus.\n8. Dev gives the talk on an earlier day than Cleo.\n\nQuestion: Who gives the talk on Saturday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "Eli  \n\nFINAL ANSWER: Eli"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "openai/gpt-oss-120b"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 251,
+                "outputTokens": 8799,
+                "inputTokensCostNanodollars": "22590",
+                "outputTokensCostNanodollars": "3167640",
+                "totalBackendLatencyMs": "37485"
+              },
+              "id": "deduce-001|high|r0-e73a0525-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 251,
+            "outputTokens": 8799,
+            "inputTokensCostNanodollars": "22590",
+            "outputTokensCostNanodollars": "3167640",
+            "totalBackendLatencyMs": "37485"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": "Eli",
+            "backend_latency_ms": 37485.0,
+            "item_id": "deduce-001",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "correct",
+            "lenient_parsed": "Eli",
+            "raw": "Eli  \n\nFINAL ANSWER: Eli",
+            "output_tokens": 8799.0,
+            "caching": "False",
+            "latency_s": 51.433,
+            "level": "high",
+            "error": null,
+            "input_tokens": 251.0,
+            "family": "deduce",
+            "trace_chars": 0.0,
+            "expected": "Eli",
+            "cost_nanodollars": 3190230.0
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #18"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:55.832441Z",
+      "endTime": "2026-10-10T04:26:53.070280Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-7148200a",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "deduce-006|high|r0-abb5d7f6",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Seven people, Ana, Ben, Cleo, Dev, Eli, Fay and Gus, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Ana gives the talk on an earlier day than Fay.\n2. Fay gives the talk on the day immediately before Ben.\n3. Eli gives the talk on the day immediately before Dev.\n4. Cleo does not give the talk on Monday.\n5. Gus gives the talk on an earlier day than Eli.\n6. Cleo gives the talk on the day immediately before Gus.\n7. Ana and Cleo do not give their talks on consecutive days.\n\nQuestion: Who gives the talk on Tuesday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "Fay  \nFINAL ANSWER: Fay"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "openai/gpt-oss-120b"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 242,
+                "outputTokens": 5980,
+                "inputTokensCostNanodollars": "21780",
+                "outputTokensCostNanodollars": "2152800",
+                "totalBackendLatencyMs": "24534"
+              },
+              "id": "deduce-006|high|r0-abb5d7f6-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 242,
+            "outputTokens": 5980,
+            "inputTokensCostNanodollars": "21780",
+            "outputTokensCostNanodollars": "2152800",
+            "totalBackendLatencyMs": "24534"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": "Fay",
+            "backend_latency_ms": 24534.0,
+            "item_id": "deduce-006",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "correct",
+            "lenient_parsed": "Fay",
+            "raw": "Fay  \nFINAL ANSWER: Fay",
+            "output_tokens": 5980.0,
+            "caching": "False",
+            "latency_s": 57.237,
+            "level": "high",
+            "error": null,
+            "input_tokens": 242.0,
+            "family": "deduce",
+            "trace_chars": 0.0,
+            "expected": "Fay",
+            "cost_nanodollars": 2174580.0
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #23"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:26:40.448857Z",
+      "endTime": "2026-10-10T04:26:56.455688Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-9e24fe88",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "arith-004|high|r0-e9442e86",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A warehouse holds 6348 boxes. A truck then delivers 6 loads of 22 boxes each. All the boxes in the warehouse are then split equally among 6 stores. Each store sells 40% of the boxes it received. How many unsold boxes do the 6 stores have in total?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "The warehouse originally has 6,348 boxes.  \nThe truck adds \\(6 \\times 22 = 132\\) boxes.\n\nTotal boxes after delivery:\n\\[\n6,348 + 132 = 6,480.\n\\]\n\nThese boxes are split equally among 6 stores:\n\\[\n6,480 \\div 6 = 1,080 \\text{ boxes per store}.\n\\]\n\nEach store sells 40% of its boxes:\n\\[\n0.40 \\times 1,080 = 432 \\text{ boxes sold}.\n\\]\n\nUnsold boxes per store:\n\\[\n1,080 - 432 = 648.\n\\]\n\nTotal unsold boxes across all 6 stores:\n\\[\n6 \\times 648 = 3,888.\n\\]\n\nFINAL ANSWER: 3888"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "openai/gpt-oss-120b"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 157,
+                "outputTokens": 469,
+                "inputTokensCostNanodollars": "14130",
+                "outputTokensCostNanodollars": "168840",
+                "totalBackendLatencyMs": "3056"
+              },
+              "id": "arith-004|high|r0-e9442e86-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 157,
+            "outputTokens": 469,
+            "inputTokensCostNanodollars": "14130",
+            "outputTokensCostNanodollars": "168840",
+            "totalBackendLatencyMs": "3056"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": "3888",
+            "backend_latency_ms": 3056.0,
+            "item_id": "arith-004",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "correct",
+            "lenient_parsed": "3888",
+            "raw": "The warehouse originally has 6,348 boxes.  \nThe truck adds \\(6 \\times 22 = 132\\) boxes.\n\nTotal boxes after delivery:\n\\[\n6,348 + 132 = 6,480.\n\\]\n\nThese boxes are split equally among 6 stores:\n\\[\n6,480 \\div 6 = 1,080 \\text{ boxes per store}.\n\\]\n\nEach store sells 40% of its boxes:\n\\[\n0.40 \\times 1,080 = 432 \\text{ boxes sold}.\n\\]\n\nUnsold boxes per store:\n\\[\n1,080 - 432 = 648.\n\\]\n\nTotal unsold boxes across all 6 stores:\n\\[\n6 \\times 648 = 3,888.\n\\]\n\nFINAL ANSWER: 3888",
+            "output_tokens": 469.0,
+            "caching": "False",
+            "latency_s": 16.007,
+            "level": "high",
+            "error": null,
+            "input_tokens": 157.0,
+            "family": "arith",
+            "trace_chars": 0.0,
+            "expected": "3888",
+            "cost_nanodollars": 182970.0
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #29"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:26:45.438416Z",
+      "endTime": "2026-10-10T04:27:03.333330Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-5d945297",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "arith-006|high|r0-e76db932",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Maya earns 520 dollars per week for 18 weeks. She spends 40% of her total earnings on rent. Then she buys 8 books at 48 dollars each. She splits the money she has left equally into 4 envelopes. How many dollars go into each envelope?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "Each envelope receives **1308** dollars.\n\nFINAL ANSWER: 1308"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "openai/gpt-oss-120b"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 153,
+                "outputTokens": 253,
+                "inputTokensCostNanodollars": "13770",
+                "outputTokensCostNanodollars": "91080",
+                "totalBackendLatencyMs": "1745"
+              },
+              "id": "arith-006|high|r0-e76db932-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 153,
+            "outputTokens": 253,
+            "inputTokensCostNanodollars": "13770",
+            "outputTokensCostNanodollars": "91080",
+            "totalBackendLatencyMs": "1745"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": "1308",
+            "backend_latency_ms": 1745.0,
+            "item_id": "arith-006",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "correct",
+            "lenient_parsed": "1308",
+            "raw": "Each envelope receives **1308** dollars.\n\nFINAL ANSWER: 1308",
+            "output_tokens": 253.0,
+            "caching": "False",
+            "latency_s": 17.895,
+            "level": "high",
+            "error": null,
+            "input_tokens": 153.0,
+            "family": "arith",
+            "trace_chars": 0.0,
+            "expected": "1308",
+            "cost_nanodollars": 104850.0
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #31"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:54.042272Z",
+      "endTime": "2026-10-10T04:27:48.874632Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-b88a679c",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "deduce-004|high|r0-35275412",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Seven people, Ana, Ben, Cleo, Dev, Eli, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Ana and Cleo do not give their talks on consecutive days.\n2. Cleo and Eli do not give their talks on consecutive days.\n3. Ana gives the talk on an earlier day than Dev.\n4. Ana does not give the talk on Tuesday.\n5. Gus gives the talk on an earlier day than Ben.\n6. Hana gives the talk on the day immediately before Ben.\n7. Gus and Eli do not give their talks on consecutive days.\n8. Gus and Cleo do not give their talks on consecutive days.\n9. Cleo gives the talk on an earlier day than Dev.\n\nQuestion: Who gives the talk on Wednesday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "The only schedule that satisfies all the clues places Hana\u2019s talk on Wednesday.  \n\n**FINAL ANSWER: Hana**"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "openai/gpt-oss-120b"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 272,
+                "outputTokens": 20689,
+                "inputTokensCostNanodollars": "24480",
+                "outputTokensCostNanodollars": "7448040",
+                "totalBackendLatencyMs": "88364"
+              },
+              "id": "deduce-004|high|r0-35275412-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 272,
+            "outputTokens": 20689,
+            "inputTokensCostNanodollars": "24480",
+            "outputTokensCostNanodollars": "7448040",
+            "totalBackendLatencyMs": "88364"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": "Hana",
+            "backend_latency_ms": 88364.0,
+            "item_id": "deduce-004",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "correct",
+            "lenient_parsed": "Hana",
+            "raw": "The only schedule that satisfies all the clues places Hana\u2019s talk on Wednesday.  \n\n**FINAL ANSWER: Hana**",
+            "output_tokens": 20689.0,
+            "caching": "False",
+            "latency_s": 114.832,
+            "level": "high",
+            "error": null,
+            "input_tokens": 272.0,
+            "family": "deduce",
+            "trace_chars": 0.0,
+            "expected": "Hana",
+            "cost_nanodollars": 7472520.0
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #21"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:26:32.195349Z",
+      "endTime": "2026-10-10T04:28:47.105774Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-3eb799ca",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "arith-002|high|r0-4f72c841",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Maya earns 1160 dollars per week for 27 weeks. She spends 20% of her total earnings on rent. Then she buys 10 books at 105 dollars each. She splits the money she has left equally into 6 envelopes. How many dollars go into each envelope?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "Maya\u2019s total earnings:\u202f\\(1160\\times27 = 31{,}320\\) dollars.  \n\nRent (20\u202f%):\u202f\\(0.20\\times31{,}320 = 6{,}264\\) dollars.  \n\nMoney after rent:\u202f\\(31{,}320-6{,}264 = 25{,}056\\) dollars.  \n\nBooks cost:\u202f\\(10\\times105 = 1{,}050\\) dollars.  \n\nMoney left:\u202f\\(25{,}056-1{,}050 = 24{,}006\\) dollars.  \n\nDividing equally into 6 envelopes:\u202f\\(24{,}006 \u00f7 6 = 4{,}001\\) dollars per envelope.  \n\n**Answer:** 4,001 dollars go into each envelope.  \n\nFINAL ANSWER: 4001"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "openai/gpt-oss-120b"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 154,
+                "outputTokens": 488,
+                "inputTokensCostNanodollars": "13860",
+                "outputTokensCostNanodollars": "175680",
+                "totalBackendLatencyMs": "122126"
+              },
+              "id": "arith-002|high|r0-4f72c841-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 154,
+            "outputTokens": 488,
+            "inputTokensCostNanodollars": "13860",
+            "outputTokensCostNanodollars": "175680",
+            "totalBackendLatencyMs": "122126"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": "4001",
+            "backend_latency_ms": 122126.0,
+            "item_id": "arith-002",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "correct",
+            "lenient_parsed": "4001",
+            "raw": "Maya\u2019s total earnings:\u202f\\(1160\\times27 = 31{,}320\\) dollars.  \n\nRent (20\u202f%):\u202f\\(0.20\\times31{,}320 = 6{,}264\\) dollars.  \n\nMoney after rent:\u202f\\(31{,}320-6{,}264 = 25{,}056\\) dollars.  \n\nBooks cost:\u202f\\(10\\times105 = 1{,}050\\) dollars.  \n\nMoney left:\u202f\\(25{,}056-1{,}050 = 24{,}006\\) dollars.  \n\nDividing equally into 6 envelopes:\u202f\\(24{,}006 \u00f7 6 = 4{,}001\\) dollars per envelope.  \n\n**Answer:** 4,001 dollars go into each envelope.  \n\nFINAL ANSWER: 4001",
+            "output_tokens": 488.0,
+            "caching": "False",
+            "latency_s": 134.91,
+            "level": "high",
+            "error": null,
+            "input_tokens": 154.0,
+            "family": "arith",
+            "trace_chars": 0.0,
+            "expected": "4001",
+            "cost_nanodollars": 189540.0
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #27"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:25:59.830394Z",
+      "endTime": "2026-10-10T04:28:55.586742Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-cf81e97a",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "deduce-007|high|r0-ecd51cd5",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "Seven people, Ana, Cleo, Dev, Eli, Fay, Gus and Hana, each give exactly one talk. The talks are on 7 consecutive days, Monday to Sunday, one talk per day.\n\nClues:\n1. Eli and Fay do not give their talks on consecutive days.\n2. Ana and Fay do not give their talks on consecutive days.\n3. Ana and Eli do not give their talks on consecutive days.\n4. Eli gives the talk on the day immediately before Dev.\n5. Dev gives the talk on the day immediately before Gus.\n6. Hana gives the talk on the day immediately before Cleo.\n7. Ana gives the talk on an earlier day than Eli.\n\nQuestion: Who gives the talk on Thursday?\n\nAnswer instruction: Answer with the person's name.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "Eli  \nFINAL ANSWER: Eli"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "openai/gpt-oss-120b"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 244,
+                "outputTokens": 9415,
+                "inputTokensCostNanodollars": "21960",
+                "outputTokensCostNanodollars": "3389400",
+                "totalBackendLatencyMs": "142909"
+              },
+              "id": "deduce-007|high|r0-ecd51cd5-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 244,
+            "outputTokens": 9415,
+            "inputTokensCostNanodollars": "21960",
+            "outputTokensCostNanodollars": "3389400",
+            "totalBackendLatencyMs": "142909"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": "Eli",
+            "backend_latency_ms": 142909.0,
+            "item_id": "deduce-007",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "correct",
+            "lenient_parsed": "Eli",
+            "raw": "Eli  \nFINAL ANSWER: Eli",
+            "output_tokens": 9415.0,
+            "caching": "False",
+            "latency_s": 175.756,
+            "level": "high",
+            "error": null,
+            "input_tokens": 244.0,
+            "family": "deduce",
+            "trace_chars": 0.0,
+            "expected": "Eli",
+            "cost_nanodollars": 3411360.0
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #24"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:26:38.894649Z",
+      "endTime": "2026-10-10T04:29:03.309889Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-b5aae3bc",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "arith-003|high|r0-e1719ded",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A recipe for 6 servings uses 432 grams of flour. A bakery makes 6 batches, and each batch is 45 servings. In every batch an extra 5% of that batch's recipe flour is lost to spills, so it has to be added on top. The bakery already has 2408 grams of flour in stock. How many more grams of flour does the bakery need to buy?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "The recipe uses  \n\n\\[\n\\frac{432\\text{ g}}{6\\text{ servings}} = 72\\text{ g per serving}.\n\\]\n\nEach batch makes 45 servings, so the flour required by the recipe for one batch is  \n\n\\[\n45 \\times 72 = 3240\\text{ g}.\n\\]\n\nBecause 5\u202f% of that amount is lost to spills, the bakery must add  \n\n\\[\n0.05 \\times 3240 = 162\\text{ g}\n\\]\n\nextra flour per batch.  \nTotal flour needed for one batch  \n\n\\[\n3240 + 162 = 3402\\text{ g}.\n\\]\n\nThe bakery makes 6 batches:\n\n\\[\n6 \\times 3402 = 20412\\text{ g}.\n\\]\n\nFlour already in stock is 2408\u202fg, so the additional flour required is  \n\n\\[\n20412 - 2408 = 18004\\text{ g}.\n\\]\n\nThus the bakery needs to purchase **18004 grams** of flour.\n\nFINAL ANSWER: 18004"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "openai/gpt-oss-120b"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 177,
+                "outputTokens": 2490,
+                "inputTokensCostNanodollars": "15930",
+                "outputTokensCostNanodollars": "896400",
+                "totalBackendLatencyMs": "133958"
+              },
+              "id": "arith-003|high|r0-e1719ded-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 177,
+            "outputTokens": 2490,
+            "inputTokensCostNanodollars": "15930",
+            "outputTokensCostNanodollars": "896400",
+            "totalBackendLatencyMs": "133958"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": "18004",
+            "backend_latency_ms": 133958.0,
+            "item_id": "arith-003",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "correct",
+            "lenient_parsed": "18004",
+            "raw": "The recipe uses  \n\n\\[\n\\frac{432\\text{ g}}{6\\text{ servings}} = 72\\text{ g per serving}.\n\\]\n\nEach batch makes 45 servings, so the flour required by the recipe for one batch is  \n\n\\[\n45 \\times 72 = 3240\\text{ g}.\n\\]\n\nBecause 5\u202f% of that amount is lost to spills, the bakery must add  \n\n\\[\n0.05 \\times 3240 = 162\\text{ g}\n\\]\n\nextra flour per batch.  \nTotal flour needed for one batch  \n\n\\[\n3240 + 162 = 3402\\text{ g}.\n\\]\n\nThe bakery makes 6 batches:\n\n\\[\n6 \\times 3402 = 20412\\text{ g}.\n\\]\n\nFlour already in stock is 2408\u202fg, so the additional flour required is  \n\n\\[\n20412 - 2408 = 18004\\text{ g}.\n\\]\n\nThus the bakery needs to purchase **18004 grams** of flour.\n\nFINAL ANSWER: 18004",
+            "output_tokens": 2490.0,
+            "caching": "False",
+            "latency_s": 144.415,
+            "level": "high",
+            "error": null,
+            "input_tokens": 177.0,
+            "family": "arith",
+            "trace_chars": 0.0,
+            "expected": "18004",
+            "cost_nanodollars": 912330.0
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #28"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:26:53.070718Z",
+      "endTime": "2026-10-10T04:29:14.397636Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-d4fb11ca",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "arith-007|high|r0-7ba7b773",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A recipe for 4 servings uses 240 grams of flour. A bakery makes 8 batches, and each batch is 45 servings. In every batch an extra 25% of that batch's recipe flour is lost to spills, so it has to be added on top. The bakery already has 8383 grams of flour in stock. How many more grams of flour does the bakery need to buy?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "FINAL ANSWER: 18617"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "openai/gpt-oss-120b"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 177,
+                "outputTokens": 2156,
+                "inputTokensCostNanodollars": "15930",
+                "outputTokensCostNanodollars": "776160",
+                "totalBackendLatencyMs": "128410"
+              },
+              "id": "arith-007|high|r0-7ba7b773-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 177,
+            "outputTokens": 2156,
+            "inputTokensCostNanodollars": "15930",
+            "outputTokensCostNanodollars": "776160",
+            "totalBackendLatencyMs": "128410"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": "18617",
+            "backend_latency_ms": 128410.0,
+            "item_id": "arith-007",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "correct",
+            "lenient_parsed": "18617",
+            "raw": "FINAL ANSWER: 18617",
+            "output_tokens": 2156.0,
+            "caching": "False",
+            "latency_s": 141.327,
+            "level": "high",
+            "error": null,
+            "input_tokens": 177.0,
+            "family": "arith",
+            "trace_chars": 0.0,
+            "expected": "18617",
+            "cost_nanodollars": 792090.0
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #32"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "dial-call-calibration",
+        "description": "One model call: prompt, parse, grade, and record usage.",
+        "definition": "@kbench.task(name=\"dial-call-calibration\", store_task=False, store_run=False)\ndef dial_call(llm, item_id: str, family: str, answer_type: str, prompt: str,\n              answer: str, level: str, repeat: int, probe: int) -> dict:\n    \"\"\"One model call: prompt, parse, grade, and record usage.\"\"\"\n    repeat, probe = int(repeat), int(probe)\n    rec = {\n        \"item_id\": item_id, \"family\": family, \"level\": level, \"repeat\": repeat,\n        \"probe\": probe, \"expected\": str(answer), \"caching\": CACHING,\n        \"raw\": None, \"parsed\": None, \"lenient_parsed\": None, \"outcome\": None,\n        \"output_tokens\": None, \"input_tokens\": None, \"cost_nanodollars\": None,\n        \"trace_chars\": None, \"latency_s\": None, \"backend_latency_ms\": None,\n        \"error\": None,\n    }\n    name = f\"{item_id}|{level}|r{repeat}\" + (f\"|probe{probe}\" if probe else \"\")\n    t0 = time.perf_counter()\n    with kbench.chats.new(name) as chat:\n        try:\n            raw = llm.prompt(prompt, reasoning=level, seed=SEED_BASE + repeat)\n            traces = kbench.last_reasoning_traces()\n        except Exception as e:\n            raw, traces = None, None\n            rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n        u = chat.usage\n    rec[\"latency_s\"] = round(time.perf_counter() - t0, 3)\n    rec[\"output_tokens\"] = u.output_tokens\n    rec[\"input_tokens\"] = u.input_tokens\n    rec[\"cost_nanodollars\"] = u.total_cost_nanodollars\n    rec[\"backend_latency_ms\"] = u.total_backend_latency_ms\n    if raw is None:\n        rec[\"outcome\"] = \"api_error\"\n        return rec\n    rec[\"raw\"] = str(raw)\n    rec[\"trace_chars\"] = len(traces) if traces else 0\n    p = parse(rec[\"raw\"], answer_type, KNOWN_NAMES)\n    parsed = p[\"parsed\"]\n    rec[\"parsed\"] = None if parsed is None else str(parsed)\n    rec[\"lenient_parsed\"] = None if p[\"lenient_parsed\"] is None else str(p[\"lenient_parsed\"])\n    rec[\"outcome\"] = outcome(parsed, answer, answer_type)\n    return rec\n"
+      },
+      "modelVersion": {
+        "slug": "openai/gpt-oss-120b"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T04:26:42.068548Z",
+      "endTime": "2026-10-10T04:30:59.849315Z",
+      "conversations": [
+        {
+          "id": "dial-call-calibration-c970341b",
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        },
+        {
+          "id": "arith-005|high|r0-d169a75e",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A courier drives for 4 hours at 75 km/h, then drives another 134 km. The van uses one litre of fuel for every 14 km. Fuel costs 340 rupees per litre, and a fuel tax adds 15% to the fuel cost. How many rupees does the fuel for the whole trip cost, including the tax?\n\nAnswer instruction: Answer with a whole number.\n\nEnd your response with a final line in exactly this format:\nFINAL ANSWER: <answer>"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "The courier travels \\(4 \\text{ h} \\times 75 \\text{ km/h}=300\\text{ km}\\) and then another \\(134\\text{ km}\\).\n\nTotal distance  \n\\[\n300 + 134 = 434\\text{ km}\n\\]\n\nFuel consumption is \\(1\\) litre per \\(14\\) km, so the fuel required is  \n\n\\[\n\\frac{434}{14}=31\\text{ litres}\n\\]\n\nCost per litre = \u20b9340, thus the base fuel cost is  \n\n\\[\n31 \\times 340 = 10\\,540\\text{ rupees}\n\\]\n\nA 15\u202f% tax adds  \n\n\\[\n0.15 \\times 10\\,540 = 1\\,581\\text{ rupees}\n\\]\n\nTotal cost including tax  \n\n\\[\n10\\,540 + 1\\,581 = 12\\,121\\text{ rupees}\n\\]\n\n**Answer:**  \n\nFINAL ANSWER: 12121"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "openai/gpt-oss-120b"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 167,
+                "outputTokens": 561,
+                "inputTokensCostNanodollars": "15030",
+                "outputTokensCostNanodollars": "201960",
+                "totalBackendLatencyMs": "242511"
+              },
+              "id": "arith-005|high|r0-d169a75e-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 167,
+            "outputTokens": 561,
+            "inputTokensCostNanodollars": "15030",
+            "outputTokensCostNanodollars": "201960",
+            "totalBackendLatencyMs": "242511"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "parsed": "12121",
+            "backend_latency_ms": 242511.0,
+            "item_id": "arith-005",
+            "repeat": 0.0,
+            "probe": 0.0,
+            "outcome": "correct",
+            "lenient_parsed": "12121",
+            "raw": "The courier travels \\(4 \\text{ h} \\times 75 \\text{ km/h}=300\\text{ km}\\) and then another \\(134\\text{ km}\\).\n\nTotal distance  \n\\[\n300 + 134 = 434\\text{ km}\n\\]\n\nFuel consumption is \\(1\\) litre per \\(14\\) km, so the fuel required is  \n\n\\[\n\\frac{434}{14}=31\\text{ litres}\n\\]\n\nCost per litre = \u20b9340, thus the base fuel cost is  \n\n\\[\n31 \\times 340 = 10\\,540\\text{ rupees}\n\\]\n\nA 15\u202f% tax adds  \n\n\\[\n0.15 \\times 10\\,540 = 1\\,581\\text{ rupees}\n\\]\n\nTotal cost including tax  \n\n\\[\n10\\,540 + 1\\,581 = 12\\,121\\text{ rupees}\n\\]\n\n**Answer:**  \n\nFINAL ANSWER: 12121",
+            "output_tokens": 561.0,
+            "caching": "False",
+            "latency_s": 257.78,
+            "level": "high",
+            "error": null,
+            "input_tokens": 167.0,
+            "family": "arith",
+            "trace_chars": 0.0,
+            "expected": "12121",
+            "cost_nanodollars": 216990.0
+          }
+        }
+      ],
+      "pyRunId": "dial-call-calibration-Run #30"
+    }
+  ],
+  "pyRunId": "dial-calibration-Run #1"
+}
