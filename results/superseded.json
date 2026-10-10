@@ -1,0 +1,9 @@
+{
+  "_note": "Run files excluded from analysis. Matched by the Kaggle run id (directory name). Decided 2026-10-10 by the user: gpt-5.4-mini partial runs (378/480 calls refused by Kaggle quota reservation, HTTP 403) are superseded; all 4 levels will be re-run fresh, one task at a time.",
+  "runs": {
+    "4623163": "gpt-5.4-mini-2026-03-17 dial-none (quota 403s)",
+    "4623164": "gpt-5.4-mini-2026-03-17 dial-low (quota 403s)",
+    "4623165": "gpt-5.4-mini-2026-03-17 dial-medium (quota 403s)",
+    "4623166": "gpt-5.4-mini-2026-03-17 dial-high (quota 403s)"
+  }
+}

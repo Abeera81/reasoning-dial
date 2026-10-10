@@ -1,0 +1,669 @@
+"""Reasoning Dial analysis (M6). Follows docs/PREREGISTRATION.md §6.
+
+    python analysis/analyze.py
+
+Rebuilds from raw run files in results/main/:
+  results/calls.csv, results/summary.md, analysis/figures/fig1..fig5 *.png
+
+Per-call records come from subruns[].results[0].dictResult. Runs listed in
+results/superseded.json are loaded into calls.csv (flagged) but excluded from
+every statistic. Quota refusals (HTTP 403 "exceeds your available quota") are
+missing data, never model behaviour.
+"""
+
+import argparse
+import glob
+import hashlib
+import json
+import re
+from pathlib import Path
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+from scipy import stats  # noqa: E402
+
+ROOT = Path(__file__).resolve().parents[1]
+LEVELS = ["none", "low", "medium", "high"]
+FAMILIES = ["deduce", "arith", "distract"]
+FAMILY_ROLE = {"deduce": "H3 test", "distract": "H2 test", "arith": "H4 control (not H3)"}
+
+# Pre-registered lineup (PREREGISTRATION §4), in display order.
+LINEUP = [
+    "openai/gpt-oss-120b",
+    "openai/gpt-5.4-mini-2026-03-17",
+    "anthropic/claude-haiku-5-5",
+    "anthropic/claude-sonnet-5@default",
+    "google/gemini-3.7-flash",
+]
+SHORT = {
+    "openai/gpt-oss-120b": "gpt-oss-120b",
+    "openai/gpt-5.4-mini-2026-03-17": "gpt-5.4-mini",
+    "anthropic/claude-haiku-5-5": "claude-haiku-5.5",
+    "anthropic/claude-sonnet-5@default": "claude-sonnet-5",
+    "google/gemini-3.7-flash": "gemini-3.7-flash",
+}
+EXPECTED_LEVELS = {"openai/gpt-oss-120b": ["low", "medium", "high"]}  # others: all 4
+BASELINE = {"openai/gpt-oss-120b": "low"}                              # others: none
+# Okabe-Ito colorblind-safe palette, one fixed color + marker per model.
+COLORS = {
+    "openai/gpt-oss-120b": "#E69F00",
+    "openai/gpt-5.4-mini-2026-03-17": "#56B4E9",
+    "anthropic/claude-haiku-5-5": "#009E73",
+    "anthropic/claude-sonnet-5@default": "#CC79A7",
+    "google/gemini-3.7-flash": "#0072B2",
+}
+MARKERS = {m: mk for m, mk in zip(LINEUP, ["o", "s", "^", "D", "v"])}
+OTHER_COLOR = "#999999"
+
+QUOTA_RE = re.compile(r"exceeds your available quota", re.I)
+N_BOOT = 5000
+SEED = 0
+ALPHA = 0.05
+
+# Conservative choices where the pre-registration is silent (also written to summary.md).
+CHOICES = [
+    "Wilcoxon signed-rank uses zero_method='zsplit' (zero differences stay in the ranking, "
+    "split between signs), two-sided. This is more conservative than discarding zeros.",
+    "The Holm family is every computed model x family test, Arith included, and tests at "
+    "ceiling count with p = 1. Models without complete data are not tested; adding them "
+    "later enlarges the Holm family, so current adjusted p-values are provisional.",
+    "Accuracy and the paired difference use only graded calls (correct / wrong / "
+    "format_fail). Items with no graded call at a level are dropped from that pair.",
+    "Dial labels pool all three families. 'collapsed levels': |median(b) - median(a)| <= "
+    "5% of median(a), where a is the lower level. 'rejects': every call at that level is a "
+    "non-quota api_error. Partial api_errors are reported but do not set the label.",
+    "A model whose high/baseline ratio is >= 1.15 but which fails the 'honors' rule is "
+    "labelled 'neither (intermediate)' rather than forced into a label.",
+    "Cost per correct = total cost of all non-missing calls / number of correct calls. "
+    "It is undefined when there are 0 correct calls.",
+]
+
+
+# ---------------------------------------------------------------- loading
+
+def load_superseded(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8")).get("runs", {})
+
+
+def load_calls(results_dir: Path, superseded: dict) -> pd.DataFrame:
+    rows = []
+    for f in sorted(glob.glob(str(results_dir / "**" / "*.run.json"), recursive=True)):
+        d = json.load(open(f, encoding="utf-8"))
+        run_id = Path(f).parent.name
+        model = d["modelVersion"]["slug"]
+        task = d["taskVersion"]["name"]
+        for s in d.get("subruns", []):
+            r = (s.get("results") or [{}])[0].get("dictResult")
+            if not r:
+                continue
+            rows.append({**r, "model": model, "task": task, "run_id": run_id,
+                         "file": str(Path(f).relative_to(results_dir.parent)
+                                     if results_dir.parent in Path(f).parents else f),
+                         "superseded": run_id in superseded})
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    for col in ["repeat", "probe"]:
+        df[col] = df[col].astype(float).astype(int)
+    for col in ["output_tokens", "input_tokens", "cost_nanodollars", "trace_chars", "latency_s"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df["cost_usd"] = df["cost_nanodollars"] / 1e9
+    err = df["error"].fillna("")
+    df["quota_refusal"] = (df["outcome"] == "api_error") & err.str.contains(QUOTA_RE)
+    df["status"] = np.where(df["quota_refusal"], "missing", df["outcome"])
+    df["graded"] = df["status"].isin(["correct", "wrong", "format_fail"])
+    df["correct"] = (df["status"] == "correct").astype(int)
+    df["lenient_correct"] = [
+        int(_lenient_ok(lp, exp, fam)) if g else 0
+        for lp, exp, fam, g in zip(df["lenient_parsed"], df["expected"], df["family"], df["graded"])
+    ]
+    return df
+
+
+def _lenient_ok(lenient, expected, family) -> bool:
+    if lenient is None or (isinstance(lenient, float) and np.isnan(lenient)):
+        return False
+    if family == "deduce":
+        return str(lenient).lower() == str(expected).lower()
+    try:
+        return int(str(lenient)) == int(str(expected))
+    except ValueError:
+        return False
+
+
+# ---------------------------------------------------------------- statistics
+
+def item_table(df: pd.DataFrame, value: str = "correct") -> pd.DataFrame:
+    """Per item: number of graded calls and number correct."""
+    g = df[df["graded"]].groupby("item_id")[value].agg(["sum", "count"])
+    return g.rename(columns={"sum": "c", "count": "n"})
+
+
+def bootstrap_acc(c, n, reps: int = N_BOOT, seed: int = SEED):
+    """Item-cluster bootstrap: resample items, keep all their calls. Returns (acc, lo, hi)."""
+    c, n = np.asarray(c, float), np.asarray(n, float)
+    if len(c) == 0 or n.sum() == 0:
+        return (np.nan, np.nan, np.nan)
+    acc = c.sum() / n.sum()
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, len(c), size=(reps, len(c)))
+    boot = c[idx].sum(1) / n[idx].sum(1)
+    lo, hi = np.percentile(boot, [2.5, 97.5])
+    return (acc, lo, hi)
+
+
+def bootstrap_mean(d, reps: int = N_BOOT, seed: int = SEED):
+    """Bootstrap the mean of per-item paired differences. Returns (mean, lo, hi)."""
+    d = np.asarray(d, float)
+    if len(d) == 0:
+        return (np.nan, np.nan, np.nan)
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, len(d), size=(reps, len(d)))
+    boot = d[idx].mean(1)
+    lo, hi = np.percentile(boot, [2.5, 97.5])
+    return (d.mean(), lo, hi)
+
+
+def holm(pvals):
+    """Holm step-down adjusted p-values (same order as input)."""
+    p = np.asarray(pvals, float)
+    m = len(p)
+    if m == 0:
+        return np.array([])
+    order = np.argsort(p)
+    adj = np.empty(m)
+    running = 0.0
+    for rank, i in enumerate(order):
+        running = max(running, min(1.0, (m - rank) * p[i]))
+        adj[i] = running
+    return adj
+
+
+def paired_test(base: pd.Series, high: pd.Series, reps: int = N_BOOT) -> dict:
+    """base/high: per-item mean correctness, indexed by item_id. Pairs by item."""
+    both = pd.concat([base.rename("b"), high.rename("h")], axis=1).dropna()
+    d = (both["h"] - both["b"]).to_numpy()
+    delta, lo, hi = bootstrap_mean(d, reps=reps)
+    out = {"n_items": len(d), "acc_base": both["b"].mean() if len(d) else np.nan,
+           "acc_high": both["h"].mean() if len(d) else np.nan,
+           "delta": delta, "ci_lo": lo, "ci_hi": hi}
+    if len(d) == 0:
+        return {**out, "p": np.nan, "note": "no paired items"}
+    if np.all(d == 0):
+        b = both["b"].mean()
+        note = "no difference (ceiling)" if b == 1.0 else ("no difference (floor)" if b == 0.0
+                                                           else "no difference")
+        return {**out, "p": 1.0, "note": note}
+    res = stats.wilcoxon(d, zero_method="zsplit", alternative="two-sided")
+    return {**out, "p": float(res.pvalue), "note": ""}
+
+
+# ---------------------------------------------------------------- analysis tables
+
+def model_levels(model):
+    return EXPECTED_LEVELS.get(model, LEVELS)
+
+
+def completeness(df: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for m in LINEUP + sorted(set(df["model"]) - set(LINEUP)) if len(df) else LINEUP:
+        exp = model_levels(m)
+        sub = df[(df["model"] == m)] if len(df) else df
+        live = sub[~sub["superseded"]] if len(sub) else sub
+        have = [lv for lv in exp if len(live) and (live[live["level"] == lv]["graded"]).any()]
+        n_sup = int(sub["superseded"].sum()) if len(sub) else 0
+        n_missing = int((live["status"] == "missing").sum()) if len(live) else 0
+        if not have:
+            status = "superseded, pending re-run" if n_sup else "not run yet"
+        elif len(have) < len(exp):
+            status = "incomplete"
+        else:
+            status = "complete"
+        rows.append({"model": m, "expected_levels": ",".join(exp), "levels_with_data": ",".join(have),
+                     "status": status, "graded_calls": int(live["graded"].sum()) if len(live) else 0,
+                     "missing_quota": n_missing, "superseded_calls": n_sup})
+    return pd.DataFrame(rows)
+
+
+def accuracy_table(live: pd.DataFrame, reps=N_BOOT) -> pd.DataFrame:
+    rows = []
+    for (m, fam, lv), g in live.groupby(["model", "family", "level"]):
+        it = item_table(g)
+        acc, lo, hi = bootstrap_acc(it["c"], it["n"], reps=reps)
+        itl = item_table(g, "lenient_correct")
+        lacc = itl["c"].sum() / itl["n"].sum() if len(itl) else np.nan
+        rows.append({"model": m, "family": fam, "level": lv, "n_calls": int(g["graded"].sum()),
+                     "n_items": len(it), "acc": acc, "ci_lo": lo, "ci_hi": hi, "acc_lenient": lacc,
+                     "format_fail": int((g["status"] == "format_fail").sum()),
+                     "api_error": int((g["status"] == "api_error").sum()),
+                     "missing": int((g["status"] == "missing").sum())})
+    return pd.DataFrame(rows)
+
+
+def delta_tests(live: pd.DataFrame, comp: pd.DataFrame, reps=N_BOOT) -> pd.DataFrame:
+    rows = []
+    status = dict(zip(comp["model"], comp["status"]))
+    for m in [x for x in LINEUP if x in set(live["model"])] + sorted(set(live["model"]) - set(LINEUP)):
+        base_lv = BASELINE.get(m, "none")
+        for fam in FAMILIES:
+            row = {"model": m, "family": fam, "role": FAMILY_ROLE[fam], "baseline": base_lv}
+            if status.get(m) != "complete":
+                rows.append({**row, "note": f"not tested ({status.get(m)})", "p": np.nan})
+                continue
+            g = live[(live["model"] == m) & (live["family"] == fam) & live["graded"]]
+            per = g.groupby(["level", "item_id"])["correct"].mean()
+            base = per.get(base_lv, pd.Series(dtype=float))
+            high = per.get("high", pd.Series(dtype=float))
+            rows.append({**row, **paired_test(base, high, reps=reps)})
+    out = pd.DataFrame(rows)
+    tested = out["p"].notna()
+    out["p_holm"] = np.nan
+    out.loc[tested, "p_holm"] = holm(out.loc[tested, "p"].to_numpy())
+    out["effect"] = tested & (out["p_holm"] < ALPHA) & ((out["ci_lo"] > 0) | (out["ci_hi"] < 0))
+    out["m_holm"] = int(tested.sum())
+    return out
+
+
+def dial_labels(live: pd.DataFrame, comp: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    status = dict(zip(comp["model"], comp["status"]))
+    for m in [x for x in LINEUP if x in set(live["model"])]:
+        exp = model_levels(m)
+        g = live[live["model"] == m]
+        ok = g[g["status"].isin(["correct", "wrong", "format_fail"]) & g["output_tokens"].notna()]
+        med = {lv: ok[ok["level"] == lv]["output_tokens"].median() for lv in exp}
+        tr = {lv: ok[ok["level"] == lv]["trace_chars"].median() for lv in exp}
+        n = {lv: int((ok["level"] == lv).sum()) for lv in exp}
+        rejects = [lv for lv in exp if len(g[g["level"] == lv])
+                   and (g[g["level"] == lv]["status"] == "api_error").all()]
+        partial_err = {lv: int((g[g["level"] == lv]["status"] == "api_error").sum()) for lv in exp}
+        base = BASELINE.get(m, "none")
+        vals = [med[lv] for lv in exp]
+        if status.get(m) != "complete" or any(pd.isna(v) for v in vals):
+            label, ratio, collapsed = f"not labelled ({status.get(m)})", np.nan, []
+        else:
+            ratio = med["high"] / med[base] if med[base] else np.nan
+            monotone = all(b >= a for a, b in zip(vals, vals[1:]))
+            if monotone and ratio >= 1.3:
+                label = "honors"
+            elif ratio < 1.15:
+                label = "ignores"
+            else:
+                label = "neither (intermediate)"
+            collapsed = [f"{a}~{b}" for a, b in zip(exp, exp[1:])
+                         if abs(med[b] - med[a]) <= 0.05 * med[a]]
+        notes = []
+        if m == "openai/gpt-oss-120b":
+            notes.append("rejects none (HTTP 400, calibration; not run in main by design)")
+        rows.append({"model": m, **{f"med_{lv}": med.get(lv, np.nan) for lv in LEVELS},
+                     **{f"n_{lv}": n.get(lv, 0) for lv in LEVELS},
+                     **{f"trace_{lv}": tr.get(lv, np.nan) for lv in LEVELS},
+                     "baseline": base, "ratio_high_base": ratio, "label": label,
+                     "collapsed": ", ".join(collapsed) or "-",
+                     "rejects": ", ".join(rejects) or "-",
+                     "api_errors": ", ".join(f"{k}:{v}" for k, v in partial_err.items() if v) or "-",
+                     "notes": "; ".join(notes)})
+    return pd.DataFrame(rows)
+
+
+def cost_table(live: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for (m, fam, lv), g in live.groupby(["model", "family", "level"]):
+        g = g[g["status"] != "missing"]
+        n_correct = int(g["correct"].sum())
+        total = float(g["cost_usd"].fillna(0).sum())
+        rows.append({"model": m, "family": fam, "level": lv, "n_calls": len(g), "n_correct": n_correct,
+                     "total_cost": total, "mean_cost_call": total / len(g) if len(g) else np.nan,
+                     "cost_per_correct": total / n_correct if n_correct else np.nan})
+    return pd.DataFrame(rows)
+
+
+def noise_table(live: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for (m, fam, lv), g in live.groupby(["model", "family", "level"]):
+        gg = g[g["graded"]]
+        per_rep = gg.groupby("repeat")["correct"].mean()
+        piv = gg.pivot_table(index="item_id", columns="repeat", values="correct", aggfunc="first")
+        both = piv.dropna()
+        flips = int((both.nunique(axis=1) > 1).sum()) if len(both) else 0
+        raw = g[g["status"] != "missing"].pivot_table(index="item_id", columns="repeat",
+                                                     values="raw", aggfunc="first")
+        ident = int((raw.nunique(axis=1, dropna=True) == 1).sum() if raw.shape[1] > 1 else 0)
+        rows.append({"model": m, "family": fam, "level": lv,
+                     "acc_by_repeat": " / ".join(f"{v:.2f}" for v in per_rep.to_numpy()),
+                     "range": float(per_rep.max() - per_rep.min()) if len(per_rep) else np.nan,
+                     "items_paired": len(both), "flips": flips,
+                     "flip_rate": flips / len(both) if len(both) else np.nan,
+                     "byte_identical_repeats": ident})
+    return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------- figures
+
+def _color(m):
+    return COLORS.get(m, OTHER_COLOR)
+
+
+def _short(m):
+    return SHORT.get(m, m)
+
+
+def _footer(fig, text):
+    import textwrap
+    fig.text(0.01, 0.01, "\n".join(textwrap.wrap(text, 190)), fontsize=11, ha="left",
+             va="bottom", color="#333333")
+
+
+def _setup():
+    plt.rcParams.update({"font.size": 13, "axes.titlesize": 15, "axes.labelsize": 13,
+                         "legend.fontsize": 12, "figure.dpi": 100})
+
+
+def fig_dial_curves(acc: pd.DataFrame, path: Path, n_text: str):
+    fig, axes = plt.subplots(1, 3, figsize=(16, 6), sharey=True)
+    for ax, fam in zip(axes, FAMILIES):
+        for m in [x for x in LINEUP if x in set(acc["model"])]:
+            a = acc[(acc["model"] == m) & (acc["family"] == fam)].set_index("level")
+            lvls = [lv for lv in LEVELS if lv in a.index]
+            if not lvls:
+                continue
+            x = [LEVELS.index(lv) for lv in lvls]
+            ax.plot(x, a.loc[lvls, "acc"], marker=MARKERS.get(m, "o"), color=_color(m),
+                    label=_short(m), lw=2.2, ms=8)
+            ax.fill_between(x, a.loc[lvls, "ci_lo"], a.loc[lvls, "ci_hi"], color=_color(m), alpha=0.15)
+        ax.set_title(f"{fam.capitalize()}: {FAMILY_ROLE[fam]}")
+        ax.set_xticks(range(4), LEVELS)
+        ax.set_xlabel("reasoning effort")
+        ax.set_ylim(-0.02, 1.05)
+        ax.grid(alpha=0.3)
+    axes[0].set_ylabel("accuracy (strict)")
+    axes[-1].legend(loc="lower right")
+    fig.suptitle("Fig 1. Accuracy vs reasoning effort (95% item-cluster bootstrap CI)")
+    _footer(fig, n_text)
+    fig.tight_layout(rect=(0, 0.05, 1, 0.95))
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def fig_token_ladder(dial: pd.DataFrame, path: Path, n_text: str):
+    fig, ax = plt.subplots(figsize=(16, 7))
+    for _, r in dial.iterrows():
+        lvls = [lv for lv in LEVELS if not pd.isna(r[f"med_{lv}"])]
+        if not lvls:
+            continue
+        x = [LEVELS.index(lv) for lv in lvls]
+        y = [r[f"med_{lv}"] for lv in lvls]
+        ax.plot(x, y, marker=MARKERS.get(r["model"], "o"), color=_color(r["model"]), lw=2.2, ms=9,
+                label=f"{_short(r['model'])} ({r['label']})")
+        for xi, yi, lv in zip(x, y, lvls):
+            ax.annotate(f"n={r[f'n_{lv}']}", (xi, yi), textcoords="offset points", xytext=(6, -14),
+                        fontsize=10, color=_color(r["model"]))
+    ax.set_yscale("log")
+    ax.set_xticks(range(4), LEVELS)
+    ax.set_xlabel("reasoning effort")
+    ax.set_ylabel("median output tokens (log scale)")
+    ax.grid(alpha=0.3, which="both")
+    ax.legend(loc="upper left")
+    fig.suptitle("Fig 2. Token ladder: median output tokens per level, all families pooled")
+    _footer(fig, n_text)
+    fig.tight_layout(rect=(0, 0.05, 1, 0.95))
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def fig_cost_per_correct(cost: pd.DataFrame, path: Path, n_text: str):
+    fig, axes = plt.subplots(1, 3, figsize=(16, 6), sharey=True)
+    for ax, fam in zip(axes, FAMILIES):
+        for m in [x for x in LINEUP if x in set(cost["model"])]:
+            c = cost[(cost["model"] == m) & (cost["family"] == fam)].set_index("level")
+            lvls = [lv for lv in LEVELS if lv in c.index and not pd.isna(c.loc[lv, "cost_per_correct"])]
+            if not lvls:
+                continue
+            ax.plot([LEVELS.index(lv) for lv in lvls], c.loc[lvls, "cost_per_correct"],
+                    marker=MARKERS.get(m, "o"), color=_color(m), label=_short(m), lw=2.2, ms=8)
+        ax.set_yscale("log")
+        ax.set_title(f"{fam.capitalize()}: {FAMILY_ROLE[fam]}")
+        ax.set_xticks(range(4), LEVELS)
+        ax.set_xlabel("reasoning effort")
+        ax.grid(alpha=0.3, which="both")
+    axes[0].set_ylabel("USD per correct answer (log scale)")
+    axes[-1].legend(loc="upper left")
+    fig.suptitle("Fig 3. Cost per correct answer vs reasoning effort")
+    _footer(fig, n_text)
+    fig.tight_layout(rect=(0, 0.05, 1, 0.95))
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def fig_forest(tests: pd.DataFrame, path: Path, n_text: str):
+    t = tests.copy()
+    t["label"] = [f"{_short(m)} | {fam} ({FAMILY_ROLE[fam].split(' ')[0]}) | high - {b}"
+                  for m, fam, b in zip(t["model"], t["family"], t["baseline"])]
+    h = max(4, 0.55 * len(t) + 2)
+    fig, ax = plt.subplots(figsize=(16, h))
+    for i, r in enumerate(t.itertuples()):
+        y = len(t) - 1 - i
+        if pd.isna(r.p):
+            ax.text(0, y, r.note, va="center", ha="center", fontsize=11, color="#666666")
+            continue
+        ax.errorbar(r.delta, y, xerr=[[r.delta - r.ci_lo], [r.ci_hi - r.delta]], fmt=MARKERS.get(r.model, "o"),
+                    color=_color(r.model), ms=9, capsize=5, lw=2)
+        tag = r.note or ("effect" if r.effect else "no effect")
+        ax.text(1.02, y, f"{tag}; n={r.n_items} items; Holm p={r.p_holm:.3g}",
+                va="center", fontsize=10, transform=ax.get_yaxis_transform())
+    ax.axvline(0, color="black", lw=1)
+    ax.set_yticks(range(len(t)), list(reversed(t["label"].tolist())))
+    span = np.nanmax(np.abs(t[["ci_lo", "ci_hi"]].to_numpy(float))) if t["p"].notna().any() else 0.5
+    ax.set_xlim(-max(0.4, span + 0.1), max(0.4, span + 0.1))
+    ax.set_xlabel("Δ accuracy (high − baseline), paired by item, 95% bootstrap CI")
+    ax.grid(alpha=0.3, axis="x")
+    fig.suptitle("Fig 4. Effect of turning the dial to high (H2: distract, H3: deduce, H4 control: arith)")
+    _footer(fig, n_text)
+    fig.tight_layout(rect=(0, 0.06, 0.74, 0.96))
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def fig_format(acc: pd.DataFrame, path: Path, n_text: str):
+    models = [m for m in LINEUP if m in set(acc["model"])]
+    agg = acc.groupby(["model", "level"])[["format_fail", "n_calls"]].sum()
+    mat = np.full((len(models), 4), np.nan)
+    ann = [["" for _ in LEVELS] for _ in models]
+    for i, m in enumerate(models):
+        for j, lv in enumerate(LEVELS):
+            if (m, lv) in agg.index and agg.loc[(m, lv), "n_calls"] > 0:
+                ff, n = agg.loc[(m, lv)]
+                mat[i, j] = ff / n
+                ann[i][j] = f"{ff / n:.1%}\n{int(ff)}/{int(n)}"
+            else:
+                ann[i][j] = "no data"
+    fig, ax = plt.subplots(figsize=(16, 1.2 * len(models) + 2.5))
+    im = ax.imshow(np.nan_to_num(mat, nan=0), cmap="Greys", vmin=0, vmax=max(0.1, np.nanmax(mat) if np.isfinite(mat).any() else 0.1),
+                   aspect="auto")
+    for i in range(len(models)):
+        for j in range(4):
+            v = mat[i, j]
+            ax.text(j, i, ann[i][j], ha="center", va="center", fontsize=12,
+                    color="white" if (not np.isnan(v) and v > 0.06) else "black")
+    ax.set_xticks(range(4), LEVELS)
+    ax.set_yticks(range(len(models)), [_short(m) for m in models])
+    for tick, m in zip(ax.get_yticklabels(), models):
+        tick.set_color(_color(m))
+    fig.colorbar(im, ax=ax, label="format-failure rate")
+    fig.suptitle("Fig 5. Format failures (no parseable FINAL ANSWER line) by model and level")
+    _footer(fig, n_text)
+    fig.tight_layout(rect=(0, 0.06, 1, 0.94))
+    fig.savefig(path)
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------- summary
+
+def _f(x, spec=".2f"):
+    return "–" if x is None or (isinstance(x, float) and np.isnan(x)) else format(x, spec)
+
+
+def md_table(df: pd.DataFrame, cols, fmt=None) -> str:
+    fmt = fmt or {}
+    lines = ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
+    for _, r in df.iterrows():
+        cells = []
+        for c in cols:
+            v = r[c]
+            if c in fmt:
+                v = fmt[c](v)
+            elif c == "model":
+                v = _short(v)
+            cells.append(str(v))
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
+def write_summary(path, *, n_files, superseded, hash_ok, comp, acc, tests, dial, cost, noise):
+    L = []
+    L.append("# Reasoning Dial — analysis summary\n")
+    L.append("Generated by `python analysis/analyze.py` from the raw run files in `results/main/`. "
+             "Follows docs/PREREGISTRATION.md §6. Do not edit by hand.\n")
+    L.append(f"- Run files read: {n_files}; superseded (excluded): {len(superseded)} "
+             f"({', '.join(sorted(superseded)) or 'none'})")
+    L.append(f"- Locked test set SHA-256 matches `data/test_items.sha256`: **{hash_ok}**")
+    L.append(f"- Bootstrap: item-cluster, {N_BOOT} reps, numpy seed {SEED}. α = {ALPHA}, Holm across "
+             f"all computed model × family tests (m = {int(tests['m_holm'].iloc[0]) if len(tests) else 0}).\n")
+
+    L.append("## 1. Completeness\n")
+    L.append(md_table(comp, ["model", "expected_levels", "levels_with_data", "status", "graded_calls",
+                             "missing_quota", "superseded_calls"]))
+    L.append("\nModels that are not complete are reported in the descriptive tables where data exists, "
+             "but they are not tested and not labelled.\n")
+
+    L.append("## 2. Accuracy (strict) with 95% item-cluster bootstrap CI\n")
+    a = acc.copy()
+    a["order"] = a["level"].map(LEVELS.index)
+    a = a.sort_values(["model", "family", "order"])
+    L.append(md_table(a, ["model", "family", "level", "n_items", "n_calls", "acc", "ci_lo", "ci_hi",
+                          "acc_lenient", "format_fail", "api_error", "missing"],
+                      {"acc": _f, "ci_lo": _f, "ci_hi": _f, "acc_lenient": _f}))
+
+    L.append("\n## 3. Pre-registered tests: Δ = accuracy(high) − accuracy(baseline), paired by item\n")
+    L.append("Effect = Holm-adjusted p < 0.05 **and** bootstrap CI excludes 0. Baseline is `none`, "
+             "except gpt-oss-120b (`low`).\n")
+    t = tests.copy()
+    t["result"] = [
+        (r["note"] if r["note"] else ("**effect**" if r["effect"] else "no effect"))
+        for _, r in t.iterrows()
+    ]
+    L.append(md_table(t, ["model", "family", "role", "baseline", "n_items", "acc_base", "acc_high",
+                          "delta", "ci_lo", "ci_hi", "p", "p_holm", "result"],
+                      {"n_items": lambda v: _f(v, ".0f"), "acc_base": _f, "acc_high": _f,
+                       "delta": lambda v: _f(v, "+.3f"), "ci_lo": lambda v: _f(v, "+.3f"),
+                       "ci_hi": lambda v: _f(v, "+.3f"), "p": lambda v: _f(v, ".3g"),
+                       "p_holm": lambda v: _f(v, ".3g")}))
+
+    L.append("\n## 4. Dial behaviour (H1): median output tokens per level, families pooled\n")
+    L.append("Labels: *honors* = medians non-decreasing baseline→high and high/baseline ≥ 1.3; "
+             "*ignores* = high/baseline < 1.15; *collapsed levels* = adjacent levels within 5%; "
+             "*rejects* = api_error on that level.\n")
+    L.append(md_table(dial, ["model", "baseline", "med_none", "med_low", "med_medium", "med_high",
+                             "ratio_high_base", "label", "collapsed", "rejects", "api_errors", "notes"],
+                      {**{f"med_{lv}": lambda v: _f(v, ".0f") for lv in LEVELS},
+                       "ratio_high_base": _f}))
+    L.append("\nReasoning-trace length (median characters, partial check; only some providers return traces):\n")
+    L.append(md_table(dial, ["model"] + [f"trace_{lv}" for lv in LEVELS],
+                      {f"trace_{lv}": lambda v: _f(v, ".0f") for lv in LEVELS}))
+    L.append("\nCalls per level used for the medians:\n")
+    L.append(md_table(dial, ["model"] + [f"n_{lv}" for lv in LEVELS]))
+
+    L.append("\n## 5. Cost (H4): cost per correct answer (USD)\n")
+    c = cost.copy()
+    c["order"] = c["level"].map(LEVELS.index)
+    c = c.sort_values(["model", "family", "order"])
+    L.append(md_table(c, ["model", "family", "level", "n_calls", "n_correct", "total_cost",
+                          "mean_cost_call", "cost_per_correct"],
+                      {"total_cost": lambda v: _f(v, ".4f"), "mean_cost_call": lambda v: _f(v, ".5f"),
+                       "cost_per_correct": lambda v: _f(v, ".5f")}))
+
+    L.append("\n## 6. Format failures: rate per model × level, strict vs lenient accuracy\n")
+    f = acc.groupby(["model", "level"]).agg(n_calls=("n_calls", "sum"), format_fail=("format_fail", "sum")).reset_index()
+    f["rate"] = f["format_fail"] / f["n_calls"]
+    f["order"] = f["level"].map(LEVELS.index)
+    f = f.sort_values(["model", "order"])
+    L.append(md_table(f, ["model", "level", "n_calls", "format_fail", "rate"], {"rate": lambda v: _f(v, ".1%")}))
+    L.append("\n(Strict vs lenient accuracy per cell: columns `acc` and `acc_lenient` in §2.)\n")
+
+    L.append("## 7. Noise floor: repeats\n")
+    n = noise.copy()
+    n["order"] = n["level"].map(LEVELS.index)
+    n = n.sort_values(["model", "family", "order"])
+    L.append(md_table(n, ["model", "family", "level", "acc_by_repeat", "range", "items_paired", "flips",
+                          "flip_rate", "byte_identical_repeats"],
+                      {"range": _f, "flip_rate": lambda v: _f(v, ".2f")}))
+
+    L.append("\n## 8. Analysis choices where the pre-registration is silent (conservative option)\n")
+    L += [f"- {c}" for c in CHOICES]
+    L.append("- Quota refusals (HTTP 403 'exceeds your available quota') are missing data, never "
+             "'rejects'. Superseded runs are listed in `results/superseded.json`.")
+    Path(path).write_text("\n".join(L) + "\n", encoding="utf-8", newline="\n")
+
+
+# ---------------------------------------------------------------- main
+
+def run(results_dir: Path, out_csv: Path, out_md: Path, fig_dir: Path, superseded_path: Path,
+        items_path: Path | None = None, hash_path: Path | None = None, reps: int = N_BOOT) -> dict:
+    _setup()
+    superseded = load_superseded(superseded_path)
+    files = glob.glob(str(results_dir / "**" / "*.run.json"), recursive=True)
+    df = load_calls(results_dir, superseded)
+    out_csv.parent.mkdir(parents=True, exist_ok=True)
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    df.drop(columns=["raw"], errors="ignore").to_csv(out_csv, index=False)
+
+    hash_ok = "n/a"
+    if items_path and hash_path and items_path.exists() and hash_path.exists():
+        hash_ok = hashlib.sha256(items_path.read_bytes()).hexdigest() == hash_path.read_text().split()[0]
+
+    live = df[~df["superseded"]].copy()
+    comp = completeness(df)
+    acc = accuracy_table(live, reps=reps)
+    tests = delta_tests(live, comp, reps=reps)
+    dial = dial_labels(live, comp)
+    cost = cost_table(live)
+    noise = noise_table(live)
+
+    reps_used = sorted(live["repeat"].unique().tolist())
+    pending = [f"{_short(r.model)} ({r.status})" for r in comp.itertuples() if r.status != "complete"]
+    n_text = (f"n per point: 20 items × {len(reps_used)} repeats = up to {20 * len(reps_used)} calls "
+              f"per model × family × level (exact n in results/summary.md). Excluded: "
+              f"{len(superseded)} superseded runs; quota refusals are missing data. "
+              f"Not shown: {', '.join(pending) or 'none'}.")
+    fig_dial_curves(acc, fig_dir / "fig1_dial_curves.png", n_text)
+    fig_token_ladder(dial, fig_dir / "fig2_token_ladder.png", n_text)
+    fig_cost_per_correct(cost, fig_dir / "fig3_cost_per_correct.png", n_text)
+    fig_forest(tests, fig_dir / "fig4_forest_delta.png", n_text)
+    fig_format(acc, fig_dir / "fig5_format_failures.png", n_text)
+    write_summary(out_md, n_files=len(files), superseded=superseded, hash_ok=hash_ok, comp=comp,
+                  acc=acc, tests=tests, dial=dial, cost=cost, noise=noise)
+    return {"calls": df, "acc": acc, "tests": tests, "dial": dial, "cost": cost, "noise": noise, "comp": comp}
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--results", default=str(ROOT / "results" / "main"))
+    ap.add_argument("--out-dir", default=str(ROOT / "results"))
+    ap.add_argument("--fig-dir", default=str(ROOT / "analysis" / "figures"))
+    ap.add_argument("--reps", type=int, default=N_BOOT)
+    a = ap.parse_args()
+    out = Path(a.out_dir)
+    run(Path(a.results), out / "calls.csv", out / "summary.md", Path(a.fig_dir),
+        ROOT / "results" / "superseded.json", ROOT / "data" / "test_items.json",
+        ROOT / "data" / "test_items.sha256", reps=a.reps)
+    print(f"wrote {out / 'calls.csv'}, {out / 'summary.md'}, figures in {a.fig_dir}")
+
+
+if __name__ == "__main__":
+    main()
