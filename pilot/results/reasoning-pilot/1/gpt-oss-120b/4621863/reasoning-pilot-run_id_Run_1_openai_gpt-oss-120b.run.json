@@ -1,0 +1,1846 @@
+{
+  "taskVersion": {
+    "versionNumber": 1,
+    "name": "reasoning-pilot",
+    "description": "Pilot: does output-token use rise with the reasoning level (low/medium/high)?",
+    "definition": "@kbench.task(\n    name=\"reasoning-pilot\",\n    description=\"Pilot: does output-token use rise with the reasoning level (low/medium/high)?\",\n    version=1,\n)\ndef reasoning_pilot(llm) -> dict:\n    # With reasoning set, Model Proxy returns \"<think>...</think>{json}\" and the\n    # OpenAI SDK's native structured-output parser fails on it before kbench can\n    # strip the think tags (and the call's token usage is lost). Use kbench's\n    # prompted-JSON schema path instead: same schema, parsed after stripping.\n    llm.support_structured_outputs = False\n    calls = []\n    for item in ITEMS:\n        for level in LEVELS:\n            rec = dict(item=item[\"id\"], level=level, expected=item[\"answer\"])\n            with kbench.chats.new(f\"{item['id']}-{level}\") as chat:\n                try:\n                    obj = llm.prompt(\n                        item[\"question\"]\n                        + \"\\nPut only the final answer in the answer field.\",\n                        schema=Answer,\n                        temperature=0,\n                        reasoning=level,\n                    )\n                    rec[\"got\"] = obj.answer\n                    rec[\"correct\"] = normalize(obj.answer) == normalize(item[\"answer\"])\n                    rec[\"error\"] = None\n                except Exception as e:  # record and keep going\n                    rec[\"got\"] = None\n                    rec[\"correct\"] = False\n                    rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n                u = chat.usage\n                rec[\"output_tokens\"] = u.output_tokens\n                rec[\"input_tokens\"] = u.input_tokens\n                rec[\"cost_usd\"] = (\n                    u.total_cost_nanodollars / 1e9\n                    if u.total_cost_nanodollars is not None\n                    else None\n                )\n            print(rec)\n            calls.append(rec)\n\n    summary = {}\n    for level in LEVELS:\n        rs = [c for c in calls if c[\"level\"] == level]\n        toks = [c[\"output_tokens\"] for c in rs if c[\"output_tokens\"] is not None]\n        costs = [c[\"cost_usd\"] for c in rs if c[\"cost_usd\"] is not None]\n        summary[level] = dict(\n            accuracy=sum(c[\"correct\"] for c in rs) / len(rs),\n            mean_output_tokens=sum(toks) / len(toks) if toks else None,\n            mean_cost_usd=sum(costs) / len(costs) if costs else None,\n            n_errors=sum(c[\"error\"] is not None for c in rs),\n        )\n        kbench.assertions.assert_true(\n            summary[level][\"n_errors\"] == 0,\n            expectation=f\"All {len(rs)} calls at reasoning={level} succeed\",\n        )\n    print(summary)\n    return dict(summary=summary, calls=calls)\n"
+  },
+  "modelVersion": {
+    "slug": "openai/gpt-oss-120b"
+  },
+  "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+  "startTime": "2026-10-10T02:59:42.557969Z",
+  "endTime": "2026-10-10T03:02:36.399629Z",
+  "conversations": [
+    {
+      "id": "reasoning-pilot-49f3f1d9",
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-1-low-36753c1d",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Four meetings A, B, C and D fill the slots 9:00, 10:00, 11:00 and 12:00, one meeting per slot. Constraints: A is earlier than B. C is at 11:00. D is not at 9:00. B is not at 12:00. Which meeting is at 12:00? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"D\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 197,
+            "outputTokens": 186,
+            "inputTokensCostNanodollars": "17730",
+            "outputTokensCostNanodollars": "66960",
+            "totalBackendLatencyMs": "700"
+          },
+          "id": "sched-1-low-36753c1d-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 197,
+        "outputTokens": 186,
+        "inputTokensCostNanodollars": "17730",
+        "outputTokensCostNanodollars": "66960",
+        "totalBackendLatencyMs": "700"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-1-medium-449eb27e",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Four meetings A, B, C and D fill the slots 9:00, 10:00, 11:00 and 12:00, one meeting per slot. Constraints: A is earlier than B. C is at 11:00. D is not at 9:00. B is not at 12:00. Which meeting is at 12:00? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "D"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 164,
+            "outputTokens": 238,
+            "inputTokensCostNanodollars": "14760",
+            "outputTokensCostNanodollars": "85680",
+            "totalBackendLatencyMs": "1129"
+          },
+          "id": "sched-1-medium-449eb27e-req-1"
+        },
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Response parsing failed.\nInput Value:\n---\nD\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---"
+                }
+              ],
+              "role": "CONTENT_ROLE_SYSTEM",
+              "senderName": "System"
+            }
+          ],
+          "id": "sched-1-medium-449eb27e-req-2"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 164,
+        "outputTokens": 238,
+        "inputTokensCostNanodollars": "14760",
+        "outputTokensCostNanodollars": "85680",
+        "totalBackendLatencyMs": "1129"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-1-high-e499b5a2",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Four meetings A, B, C and D fill the slots 9:00, 10:00, 11:00 and 12:00, one meeting per slot. Constraints: A is earlier than B. C is at 11:00. D is not at 9:00. B is not at 12:00. Which meeting is at 12:00? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "D"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 164,
+            "outputTokens": 479,
+            "inputTokensCostNanodollars": "14760",
+            "outputTokensCostNanodollars": "172440",
+            "totalBackendLatencyMs": "1967"
+          },
+          "id": "sched-1-high-e499b5a2-req-1"
+        },
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Response parsing failed.\nInput Value:\n---\nD\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---"
+                }
+              ],
+              "role": "CONTENT_ROLE_SYSTEM",
+              "senderName": "System"
+            }
+          ],
+          "id": "sched-1-high-e499b5a2-req-2"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 164,
+        "outputTokens": 479,
+        "inputTokensCostNanodollars": "14760",
+        "outputTokensCostNanodollars": "172440",
+        "totalBackendLatencyMs": "1967"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-2-low-e670419e",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Five people P, Q, R, S and T each give one talk, one per day, Monday to Friday. Constraints: R speaks on Wednesday. P speaks on the day immediately before Q. T does not speak on Monday or Friday. S speaks on a later day than Q. Who speaks on Thursday? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "T"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 147,
+            "outputTokens": 252,
+            "inputTokensCostNanodollars": "13230",
+            "outputTokensCostNanodollars": "90720",
+            "totalBackendLatencyMs": "1126"
+          },
+          "id": "sched-2-low-e670419e-req-1"
+        },
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Response parsing failed.\nInput Value:\n---\nT\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---"
+                }
+              ],
+              "role": "CONTENT_ROLE_SYSTEM",
+              "senderName": "System"
+            }
+          ],
+          "id": "sched-2-low-e670419e-req-2"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 147,
+        "outputTokens": 252,
+        "inputTokensCostNanodollars": "13230",
+        "outputTokensCostNanodollars": "90720",
+        "totalBackendLatencyMs": "1126"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-2-medium-d826d0af",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Five people P, Q, R, S and T each give one talk, one per day, Monday to Friday. Constraints: R speaks on Wednesday. P speaks on the day immediately before Q. T does not speak on Monday or Friday. S speaks on a later day than Q. Who speaks on Thursday? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "T"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 147,
+            "outputTokens": 441,
+            "inputTokensCostNanodollars": "13230",
+            "outputTokensCostNanodollars": "158760",
+            "totalBackendLatencyMs": "21016"
+          },
+          "id": "sched-2-medium-d826d0af-req-1"
+        },
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Response parsing failed.\nInput Value:\n---\nT\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---"
+                }
+              ],
+              "role": "CONTENT_ROLE_SYSTEM",
+              "senderName": "System"
+            }
+          ],
+          "id": "sched-2-medium-d826d0af-req-2"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 147,
+        "outputTokens": 441,
+        "inputTokensCostNanodollars": "13230",
+        "outputTokensCostNanodollars": "158760",
+        "totalBackendLatencyMs": "21016"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-2-high-433ca32e",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Five people P, Q, R, S and T each give one talk, one per day, Monday to Friday. Constraints: R speaks on Wednesday. P speaks on the day immediately before Q. T does not speak on Monday or Friday. S speaks on a later day than Q. Who speaks on Thursday? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "T"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 147,
+            "outputTokens": 588,
+            "inputTokensCostNanodollars": "13230",
+            "outputTokensCostNanodollars": "211680",
+            "totalBackendLatencyMs": "2856"
+          },
+          "id": "sched-2-high-433ca32e-req-1"
+        },
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Response parsing failed.\nInput Value:\n---\nT\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---"
+                }
+              ],
+              "role": "CONTENT_ROLE_SYSTEM",
+              "senderName": "System"
+            }
+          ],
+          "id": "sched-2-high-433ca32e-req-2"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 147,
+        "outputTokens": 588,
+        "inputTokensCostNanodollars": "13230",
+        "outputTokensCostNanodollars": "211680",
+        "totalBackendLatencyMs": "2856"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-3-low-be0dece2",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "One worker does three jobs back to back with no breaks, starting at 09:00. Job X takes 2 hours, job Y takes 1 hour, job Z takes 3 hours. Constraints: Z must be done last. Y must be done before X. At what hour on the 24-hour clock does job Z finish? Answer with the hour as an integer only (e.g. 17).\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "{\"answer\":\"15"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 194,
+            "outputTokens": 131,
+            "inputTokensCostNanodollars": "17460",
+            "outputTokensCostNanodollars": "47160",
+            "totalBackendLatencyMs": "488"
+          },
+          "id": "sched-3-low-be0dece2-req-1"
+        },
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Response parsing failed.\nInput Value:\n---\n{\"answer\":\"15\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Unterminated string starting at: line 1 column 11 (char 10)\n---"
+                }
+              ],
+              "role": "CONTENT_ROLE_SYSTEM",
+              "senderName": "System"
+            }
+          ],
+          "id": "sched-3-low-be0dece2-req-2"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 194,
+        "outputTokens": 131,
+        "inputTokensCostNanodollars": "17460",
+        "outputTokensCostNanodollars": "47160",
+        "totalBackendLatencyMs": "488"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-3-medium-cbd8bc36",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "One worker does three jobs back to back with no breaks, starting at 09:00. Job X takes 2 hours, job Y takes 1 hour, job Z takes 3 hours. Constraints: Z must be done last. Y must be done before X. At what hour on the 24-hour clock does job Z finish? Answer with the hour as an integer only (e.g. 17).\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "15"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 161,
+            "outputTokens": 142,
+            "inputTokensCostNanodollars": "14490",
+            "outputTokensCostNanodollars": "51120",
+            "totalBackendLatencyMs": "733"
+          },
+          "id": "sched-3-medium-cbd8bc36-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 161,
+        "outputTokens": 142,
+        "inputTokensCostNanodollars": "14490",
+        "outputTokensCostNanodollars": "51120",
+        "totalBackendLatencyMs": "733"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-3-high-c2ca0b7c",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "One worker does three jobs back to back with no breaks, starting at 09:00. Job X takes 2 hours, job Y takes 1 hour, job Z takes 3 hours. Constraints: Z must be done last. Y must be done before X. At what hour on the 24-hour clock does job Z finish? Answer with the hour as an integer only (e.g. 17).\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "15"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 161,
+            "outputTokens": 575,
+            "inputTokensCostNanodollars": "14490",
+            "outputTokensCostNanodollars": "207000",
+            "totalBackendLatencyMs": "2786"
+          },
+          "id": "sched-3-high-c2ca0b7c-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 161,
+        "outputTokens": 575,
+        "inputTokensCostNanodollars": "14490",
+        "outputTokensCostNanodollars": "207000",
+        "totalBackendLatencyMs": "2786"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-4-low-b7098950",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Three meetings Alpha, Beta and Gamma are assigned to rooms 1, 2 and 3, one meeting per room. Constraints: Alpha is not in room 1. Alpha is not in room 3. Beta is in a higher-numbered room than Gamma. Gamma is not in room 2. Which room number is Beta in? Answer with the room number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "3"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 153,
+            "outputTokens": 148,
+            "inputTokensCostNanodollars": "13770",
+            "outputTokensCostNanodollars": "53280",
+            "totalBackendLatencyMs": "742"
+          },
+          "id": "sched-4-low-b7098950-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 153,
+        "outputTokens": 148,
+        "inputTokensCostNanodollars": "13770",
+        "outputTokensCostNanodollars": "53280",
+        "totalBackendLatencyMs": "742"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-4-medium-e7ccf730",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Three meetings Alpha, Beta and Gamma are assigned to rooms 1, 2 and 3, one meeting per room. Constraints: Alpha is not in room 1. Alpha is not in room 3. Beta is in a higher-numbered room than Gamma. Gamma is not in room 2. Which room number is Beta in? Answer with the room number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "3"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 153,
+            "outputTokens": 244,
+            "inputTokensCostNanodollars": "13770",
+            "outputTokensCostNanodollars": "87840",
+            "totalBackendLatencyMs": "963"
+          },
+          "id": "sched-4-medium-e7ccf730-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 153,
+        "outputTokens": 244,
+        "inputTokensCostNanodollars": "13770",
+        "outputTokensCostNanodollars": "87840",
+        "totalBackendLatencyMs": "963"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-4-high-b1781986",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Three meetings Alpha, Beta and Gamma are assigned to rooms 1, 2 and 3, one meeting per room. Constraints: Alpha is not in room 1. Alpha is not in room 3. Beta is in a higher-numbered room than Gamma. Gamma is not in room 2. Which room number is Beta in? Answer with the room number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "3"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 153,
+            "outputTokens": 306,
+            "inputTokensCostNanodollars": "13770",
+            "outputTokensCostNanodollars": "110160",
+            "totalBackendLatencyMs": "1440"
+          },
+          "id": "sched-4-high-b1781986-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 153,
+        "outputTokens": 306,
+        "inputTokensCostNanodollars": "13770",
+        "outputTokensCostNanodollars": "110160",
+        "totalBackendLatencyMs": "1440"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-1-low-bb1b60f4",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Pens cost $3 each. Maria buys 7 pens and pays with a $50 bill. How many dollars of change does she get? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "29"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 111,
+            "outputTokens": 26,
+            "inputTokensCostNanodollars": "9990",
+            "outputTokensCostNanodollars": "9360",
+            "totalBackendLatencyMs": "207"
+          },
+          "id": "arith-1-low-bb1b60f4-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 111,
+        "outputTokens": 26,
+        "inputTokensCostNanodollars": "9990",
+        "outputTokensCostNanodollars": "9360",
+        "totalBackendLatencyMs": "207"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-1-medium-210931b1",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Pens cost $3 each. Maria buys 7 pens and pays with a $50 bill. How many dollars of change does she get? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "29"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 111,
+            "outputTokens": 37,
+            "inputTokensCostNanodollars": "9990",
+            "outputTokensCostNanodollars": "13320",
+            "totalBackendLatencyMs": "259"
+          },
+          "id": "arith-1-medium-210931b1-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 111,
+        "outputTokens": 37,
+        "inputTokensCostNanodollars": "9990",
+        "outputTokensCostNanodollars": "13320",
+        "totalBackendLatencyMs": "259"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-1-high-180ec09f",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Pens cost $3 each. Maria buys 7 pens and pays with a $50 bill. How many dollars of change does she get? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "29"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 111,
+            "outputTokens": 61,
+            "inputTokensCostNanodollars": "9990",
+            "outputTokensCostNanodollars": "21960",
+            "totalBackendLatencyMs": "302"
+          },
+          "id": "arith-1-high-180ec09f-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 111,
+        "outputTokens": 61,
+        "inputTokensCostNanodollars": "9990",
+        "outputTokensCostNanodollars": "21960",
+        "totalBackendLatencyMs": "302"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-2-low-314fa0e1",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A train travels at 60 km/h for 2.5 hours, then at 80 km/h for 1.5 hours. How many kilometres does it travel in total? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "270"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 120,
+            "outputTokens": 38,
+            "inputTokensCostNanodollars": "10800",
+            "outputTokensCostNanodollars": "13680",
+            "totalBackendLatencyMs": "243"
+          },
+          "id": "arith-2-low-314fa0e1-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 120,
+        "outputTokens": 38,
+        "inputTokensCostNanodollars": "10800",
+        "outputTokensCostNanodollars": "13680",
+        "totalBackendLatencyMs": "243"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-2-medium-364751f6",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A train travels at 60 km/h for 2.5 hours, then at 80 km/h for 1.5 hours. How many kilometres does it travel in total? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "270"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 120,
+            "outputTokens": 63,
+            "inputTokensCostNanodollars": "10800",
+            "outputTokensCostNanodollars": "22680",
+            "totalBackendLatencyMs": "398"
+          },
+          "id": "arith-2-medium-364751f6-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 120,
+        "outputTokens": 63,
+        "inputTokensCostNanodollars": "10800",
+        "outputTokensCostNanodollars": "22680",
+        "totalBackendLatencyMs": "398"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-2-high-5bc82689",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A train travels at 60 km/h for 2.5 hours, then at 80 km/h for 1.5 hours. How many kilometres does it travel in total? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "270"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 120,
+            "outputTokens": 90,
+            "inputTokensCostNanodollars": "10800",
+            "outputTokensCostNanodollars": "32400",
+            "totalBackendLatencyMs": "425"
+          },
+          "id": "arith-2-high-5bc82689-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 120,
+        "outputTokens": 90,
+        "inputTokensCostNanodollars": "10800",
+        "outputTokensCostNanodollars": "32400",
+        "totalBackendLatencyMs": "425"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-3-low-34d9456d",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A 240-litre tank is three-quarters full. Then 45 litres are drained out. How many litres remain in the tank? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "135"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 111,
+            "outputTokens": 31,
+            "inputTokensCostNanodollars": "9990",
+            "outputTokensCostNanodollars": "11160",
+            "totalBackendLatencyMs": "236"
+          },
+          "id": "arith-3-low-34d9456d-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 111,
+        "outputTokens": 31,
+        "inputTokensCostNanodollars": "9990",
+        "outputTokensCostNanodollars": "11160",
+        "totalBackendLatencyMs": "236"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-3-medium-2ff625d1",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A 240-litre tank is three-quarters full. Then 45 litres are drained out. How many litres remain in the tank? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "135"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 111,
+            "outputTokens": 60,
+            "inputTokensCostNanodollars": "9990",
+            "outputTokensCostNanodollars": "21600",
+            "totalBackendLatencyMs": "1023"
+          },
+          "id": "arith-3-medium-2ff625d1-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 111,
+        "outputTokens": 60,
+        "inputTokensCostNanodollars": "9990",
+        "outputTokensCostNanodollars": "21600",
+        "totalBackendLatencyMs": "1023"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-3-high-20972ef2",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A 240-litre tank is three-quarters full. Then 45 litres are drained out. How many litres remain in the tank? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "135"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 111,
+            "outputTokens": 97,
+            "inputTokensCostNanodollars": "9990",
+            "outputTokensCostNanodollars": "34920",
+            "totalBackendLatencyMs": "819"
+          },
+          "id": "arith-3-high-20972ef2-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 111,
+        "outputTokens": 97,
+        "inputTokensCostNanodollars": "9990",
+        "outputTokensCostNanodollars": "34920",
+        "totalBackendLatencyMs": "819"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-1-low-d8eeadd3",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The Larkspur Bridge, completed in 1887, spans the Orrin River. It was designed by engineer Helena Voss and was originally painted green before being repainted red in 1952.\n\nQuestion: In what year was the bridge repainted red? Answer with the year only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "1952"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 139,
+            "outputTokens": 19,
+            "inputTokensCostNanodollars": "12510",
+            "outputTokensCostNanodollars": "6840",
+            "totalBackendLatencyMs": "219"
+          },
+          "id": "passage-1-low-d8eeadd3-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 139,
+        "outputTokens": 19,
+        "inputTokensCostNanodollars": "12510",
+        "outputTokensCostNanodollars": "6840",
+        "totalBackendLatencyMs": "219"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-1-medium-43c3b840",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The Larkspur Bridge, completed in 1887, spans the Orrin River. It was designed by engineer Helena Voss and was originally painted green before being repainted red in 1952.\n\nQuestion: In what year was the bridge repainted red? Answer with the year only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "{\"answer\":\"195"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 172,
+            "outputTokens": 60,
+            "inputTokensCostNanodollars": "15480",
+            "outputTokensCostNanodollars": "21600",
+            "totalBackendLatencyMs": "361"
+          },
+          "id": "passage-1-medium-43c3b840-req-1"
+        },
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Response parsing failed.\nInput Value:\n---\n{\"answer\":\"195\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Unterminated string starting at: line 1 column 11 (char 10)\n---"
+                }
+              ],
+              "role": "CONTENT_ROLE_SYSTEM",
+              "senderName": "System"
+            }
+          ],
+          "id": "passage-1-medium-43c3b840-req-2"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 172,
+        "outputTokens": 60,
+        "inputTokensCostNanodollars": "15480",
+        "outputTokensCostNanodollars": "21600",
+        "totalBackendLatencyMs": "361"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-1-high-45df6c01",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The Larkspur Bridge, completed in 1887, spans the Orrin River. It was designed by engineer Helena Voss and was originally painted green before being repainted red in 1952.\n\nQuestion: In what year was the bridge repainted red? Answer with the year only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "1952"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 139,
+            "outputTokens": 105,
+            "inputTokensCostNanodollars": "12510",
+            "outputTokensCostNanodollars": "37800",
+            "totalBackendLatencyMs": "121995"
+          },
+          "id": "passage-1-high-45df6c01-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 139,
+        "outputTokens": 105,
+        "inputTokensCostNanodollars": "12510",
+        "outputTokensCostNanodollars": "37800",
+        "totalBackendLatencyMs": "121995"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-2-low-04b9db1f",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The village of Tamsworth holds its harvest fair every October. The fair's oldest event is the turnip-carving contest, first held in 1903. The 2019 winner of the contest was a baker named Ottilie Marsh.\n\nQuestion: What was the profession of the 2019 winner? Answer with one word only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "baker"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 148,
+            "outputTokens": 19,
+            "inputTokensCostNanodollars": "13320",
+            "outputTokensCostNanodollars": "6840",
+            "totalBackendLatencyMs": "510"
+          },
+          "id": "passage-2-low-04b9db1f-req-1"
+        },
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Response parsing failed.\nInput Value:\n---\nbaker\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---"
+                }
+              ],
+              "role": "CONTENT_ROLE_SYSTEM",
+              "senderName": "System"
+            }
+          ],
+          "id": "passage-2-low-04b9db1f-req-2"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 148,
+        "outputTokens": 19,
+        "inputTokensCostNanodollars": "13320",
+        "outputTokensCostNanodollars": "6840",
+        "totalBackendLatencyMs": "510"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-2-medium-ce13c41c",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The village of Tamsworth holds its harvest fair every October. The fair's oldest event is the turnip-carving contest, first held in 1903. The 2019 winner of the contest was a baker named Ottilie Marsh.\n\nQuestion: What was the profession of the 2019 winner? Answer with one word only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "baker"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 148,
+            "outputTokens": 36,
+            "inputTokensCostNanodollars": "13320",
+            "outputTokensCostNanodollars": "12960",
+            "totalBackendLatencyMs": "420"
+          },
+          "id": "passage-2-medium-ce13c41c-req-1"
+        },
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Response parsing failed.\nInput Value:\n---\nbaker\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---"
+                }
+              ],
+              "role": "CONTENT_ROLE_SYSTEM",
+              "senderName": "System"
+            }
+          ],
+          "id": "passage-2-medium-ce13c41c-req-2"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 148,
+        "outputTokens": 36,
+        "inputTokensCostNanodollars": "13320",
+        "outputTokensCostNanodollars": "12960",
+        "totalBackendLatencyMs": "420"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-2-high-554e620d",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The village of Tamsworth holds its harvest fair every October. The fair's oldest event is the turnip-carving contest, first held in 1903. The 2019 winner of the contest was a baker named Ottilie Marsh.\n\nQuestion: What was the profession of the 2019 winner? Answer with one word only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "baker"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 148,
+            "outputTokens": 110,
+            "inputTokensCostNanodollars": "13320",
+            "outputTokensCostNanodollars": "39600",
+            "totalBackendLatencyMs": "613"
+          },
+          "id": "passage-2-high-554e620d-req-1"
+        },
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Response parsing failed.\nInput Value:\n---\nbaker\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---"
+                }
+              ],
+              "role": "CONTENT_ROLE_SYSTEM",
+              "senderName": "System"
+            }
+          ],
+          "id": "passage-2-high-554e620d-req-2"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 148,
+        "outputTokens": 110,
+        "inputTokensCostNanodollars": "13320",
+        "outputTokensCostNanodollars": "39600",
+        "totalBackendLatencyMs": "613"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-3-low-71d9c01b",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: Kestrel Labs released three versions of its Finch sensor: Finch 1 in 2014, Finch 2 in 2017, and Finch 3 in 2021. Only Finch 2 was waterproof.\n\nQuestion: Which Finch version was waterproof? Answer with the version number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "2"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 139,
+            "outputTokens": 18,
+            "inputTokensCostNanodollars": "12510",
+            "outputTokensCostNanodollars": "6480",
+            "totalBackendLatencyMs": "723"
+          },
+          "id": "passage-3-low-71d9c01b-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 139,
+        "outputTokens": 18,
+        "inputTokensCostNanodollars": "12510",
+        "outputTokensCostNanodollars": "6480",
+        "totalBackendLatencyMs": "723"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-3-medium-79cb7c52",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: Kestrel Labs released three versions of its Finch sensor: Finch 1 in 2014, Finch 2 in 2017, and Finch 3 in 2021. Only Finch 2 was waterproof.\n\nQuestion: Which Finch version was waterproof? Answer with the version number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"2\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 172,
+            "outputTokens": 99,
+            "inputTokensCostNanodollars": "15480",
+            "outputTokensCostNanodollars": "35640",
+            "totalBackendLatencyMs": "443"
+          },
+          "id": "passage-3-medium-79cb7c52-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 172,
+        "outputTokens": 99,
+        "inputTokensCostNanodollars": "15480",
+        "outputTokensCostNanodollars": "35640",
+        "totalBackendLatencyMs": "443"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-3-high-ed69c9d3",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: Kestrel Labs released three versions of its Finch sensor: Finch 1 in 2014, Finch 2 in 2017, and Finch 3 in 2021. Only Finch 2 was waterproof.\n\nQuestion: Which Finch version was waterproof? Answer with the version number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "2"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "openai/gpt-oss-120b"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 139,
+            "outputTokens": 91,
+            "inputTokensCostNanodollars": "12510",
+            "outputTokensCostNanodollars": "32760",
+            "totalBackendLatencyMs": "410"
+          },
+          "id": "passage-3-high-ed69c9d3-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 139,
+        "outputTokens": 91,
+        "inputTokensCostNanodollars": "12510",
+        "outputTokensCostNanodollars": "32760",
+        "totalBackendLatencyMs": "410"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    }
+  ],
+  "results": [
+    {
+      "type": "AGGREGATED",
+      "dictResult": {
+        "calls": [
+          {
+            "output_tokens": 186.0,
+            "got": "D",
+            "cost_usd": 8.469e-05,
+            "item": "sched-1",
+            "correct": true,
+            "level": "low",
+            "error": null,
+            "input_tokens": 197.0,
+            "expected": "D"
+          },
+          {
+            "output_tokens": 238.0,
+            "got": null,
+            "cost_usd": 0.00010044,
+            "item": "sched-1",
+            "correct": false,
+            "level": "medium",
+            "error": "ResponseParsingError: Response parsing failed.\nInput Value:\n---\nD\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---",
+            "input_tokens": 164.0,
+            "expected": "D"
+          },
+          {
+            "output_tokens": 479.0,
+            "got": null,
+            "cost_usd": 0.0001872,
+            "item": "sched-1",
+            "correct": false,
+            "level": "high",
+            "error": "ResponseParsingError: Response parsing failed.\nInput Value:\n---\nD\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---",
+            "input_tokens": 164.0,
+            "expected": "D"
+          },
+          {
+            "output_tokens": 252.0,
+            "got": null,
+            "cost_usd": 0.00010395,
+            "item": "sched-2",
+            "correct": false,
+            "level": "low",
+            "error": "ResponseParsingError: Response parsing failed.\nInput Value:\n---\nT\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---",
+            "input_tokens": 147.0,
+            "expected": "T"
+          },
+          {
+            "output_tokens": 441.0,
+            "got": null,
+            "cost_usd": 0.00017199,
+            "item": "sched-2",
+            "correct": false,
+            "level": "medium",
+            "error": "ResponseParsingError: Response parsing failed.\nInput Value:\n---\nT\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---",
+            "input_tokens": 147.0,
+            "expected": "T"
+          },
+          {
+            "output_tokens": 588.0,
+            "got": null,
+            "cost_usd": 0.00022491,
+            "item": "sched-2",
+            "correct": false,
+            "level": "high",
+            "error": "ResponseParsingError: Response parsing failed.\nInput Value:\n---\nT\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---",
+            "input_tokens": 147.0,
+            "expected": "T"
+          },
+          {
+            "output_tokens": 131.0,
+            "got": null,
+            "cost_usd": 6.462e-05,
+            "item": "sched-3",
+            "correct": false,
+            "level": "low",
+            "error": "ResponseParsingError: Response parsing failed.\nInput Value:\n---\n{\"answer\":\"15\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Unterminated string starting at: line 1 column 11 (char 10)\n---",
+            "input_tokens": 194.0,
+            "expected": "15"
+          },
+          {
+            "output_tokens": 142.0,
+            "got": null,
+            "cost_usd": 6.561e-05,
+            "item": "sched-3",
+            "correct": false,
+            "level": "medium",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 161.0,
+            "expected": "15"
+          },
+          {
+            "output_tokens": 575.0,
+            "got": null,
+            "cost_usd": 0.00022149,
+            "item": "sched-3",
+            "correct": false,
+            "level": "high",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 161.0,
+            "expected": "15"
+          },
+          {
+            "output_tokens": 148.0,
+            "got": null,
+            "cost_usd": 6.705e-05,
+            "item": "sched-4",
+            "correct": false,
+            "level": "low",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 153.0,
+            "expected": "3"
+          },
+          {
+            "output_tokens": 244.0,
+            "got": null,
+            "cost_usd": 0.00010161,
+            "item": "sched-4",
+            "correct": false,
+            "level": "medium",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 153.0,
+            "expected": "3"
+          },
+          {
+            "output_tokens": 306.0,
+            "got": null,
+            "cost_usd": 0.00012393,
+            "item": "sched-4",
+            "correct": false,
+            "level": "high",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 153.0,
+            "expected": "3"
+          },
+          {
+            "output_tokens": 26.0,
+            "got": null,
+            "cost_usd": 1.935e-05,
+            "item": "arith-1",
+            "correct": false,
+            "level": "low",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 111.0,
+            "expected": "29"
+          },
+          {
+            "output_tokens": 37.0,
+            "got": null,
+            "cost_usd": 2.331e-05,
+            "item": "arith-1",
+            "correct": false,
+            "level": "medium",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 111.0,
+            "expected": "29"
+          },
+          {
+            "output_tokens": 61.0,
+            "got": null,
+            "cost_usd": 3.195e-05,
+            "item": "arith-1",
+            "correct": false,
+            "level": "high",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 111.0,
+            "expected": "29"
+          },
+          {
+            "output_tokens": 38.0,
+            "got": null,
+            "cost_usd": 2.448e-05,
+            "item": "arith-2",
+            "correct": false,
+            "level": "low",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 120.0,
+            "expected": "270"
+          },
+          {
+            "output_tokens": 63.0,
+            "got": null,
+            "cost_usd": 3.348e-05,
+            "item": "arith-2",
+            "correct": false,
+            "level": "medium",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 120.0,
+            "expected": "270"
+          },
+          {
+            "output_tokens": 90.0,
+            "got": null,
+            "cost_usd": 4.32e-05,
+            "item": "arith-2",
+            "correct": false,
+            "level": "high",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 120.0,
+            "expected": "270"
+          },
+          {
+            "output_tokens": 31.0,
+            "got": null,
+            "cost_usd": 2.115e-05,
+            "item": "arith-3",
+            "correct": false,
+            "level": "low",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 111.0,
+            "expected": "135"
+          },
+          {
+            "output_tokens": 60.0,
+            "got": null,
+            "cost_usd": 3.159e-05,
+            "item": "arith-3",
+            "correct": false,
+            "level": "medium",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 111.0,
+            "expected": "135"
+          },
+          {
+            "output_tokens": 97.0,
+            "got": null,
+            "cost_usd": 4.491e-05,
+            "item": "arith-3",
+            "correct": false,
+            "level": "high",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 111.0,
+            "expected": "135"
+          },
+          {
+            "output_tokens": 19.0,
+            "got": null,
+            "cost_usd": 1.935e-05,
+            "item": "passage-1",
+            "correct": false,
+            "level": "low",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 139.0,
+            "expected": "1952"
+          },
+          {
+            "output_tokens": 60.0,
+            "got": null,
+            "cost_usd": 3.708e-05,
+            "item": "passage-1",
+            "correct": false,
+            "level": "medium",
+            "error": "ResponseParsingError: Response parsing failed.\nInput Value:\n---\n{\"answer\":\"195\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Unterminated string starting at: line 1 column 11 (char 10)\n---",
+            "input_tokens": 172.0,
+            "expected": "1952"
+          },
+          {
+            "output_tokens": 105.0,
+            "got": null,
+            "cost_usd": 5.031e-05,
+            "item": "passage-1",
+            "correct": false,
+            "level": "high",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 139.0,
+            "expected": "1952"
+          },
+          {
+            "output_tokens": 19.0,
+            "got": null,
+            "cost_usd": 2.016e-05,
+            "item": "passage-2",
+            "correct": false,
+            "level": "low",
+            "error": "ResponseParsingError: Response parsing failed.\nInput Value:\n---\nbaker\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---",
+            "input_tokens": 148.0,
+            "expected": "baker"
+          },
+          {
+            "output_tokens": 36.0,
+            "got": null,
+            "cost_usd": 2.628e-05,
+            "item": "passage-2",
+            "correct": false,
+            "level": "medium",
+            "error": "ResponseParsingError: Response parsing failed.\nInput Value:\n---\nbaker\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---",
+            "input_tokens": 148.0,
+            "expected": "baker"
+          },
+          {
+            "output_tokens": 110.0,
+            "got": null,
+            "cost_usd": 5.292e-05,
+            "item": "passage-2",
+            "correct": false,
+            "level": "high",
+            "error": "ResponseParsingError: Response parsing failed.\nInput Value:\n---\nbaker\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---",
+            "input_tokens": 148.0,
+            "expected": "baker"
+          },
+          {
+            "output_tokens": 18.0,
+            "got": null,
+            "cost_usd": 1.899e-05,
+            "item": "passage-3",
+            "correct": false,
+            "level": "low",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 139.0,
+            "expected": "2"
+          },
+          {
+            "output_tokens": 99.0,
+            "got": "2",
+            "cost_usd": 5.112e-05,
+            "item": "passage-3",
+            "correct": true,
+            "level": "medium",
+            "error": null,
+            "input_tokens": 172.0,
+            "expected": "2"
+          },
+          {
+            "output_tokens": 91.0,
+            "got": null,
+            "cost_usd": 4.527e-05,
+            "item": "passage-3",
+            "correct": false,
+            "level": "high",
+            "error": "TypeError: __main__.Answer() argument after ** must be a mapping, not int",
+            "input_tokens": 139.0,
+            "expected": "2"
+          }
+        ],
+        "summary": {
+          "low": {
+            "accuracy": 0.1,
+            "mean_output_tokens": 86.8,
+            "n_errors": 9.0,
+            "mean_cost_usd": 4.4379e-05
+          },
+          "high": {
+            "accuracy": 0.0,
+            "mean_output_tokens": 250.2,
+            "n_errors": 10.0,
+            "mean_cost_usd": 0.00010260899999999999
+          },
+          "medium": {
+            "accuracy": 0.1,
+            "mean_output_tokens": 142.0,
+            "n_errors": 9.0,
+            "mean_cost_usd": 6.4251e-05
+          }
+        }
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "expectation": "All 10 calls at reasoning=low succeed",
+      "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+      "lineNumber": 182,
+      "definition": "kbench.assertions.assert_true(",
+      "conversationRequestIds": [
+        {
+          "conversationId": "reasoning-pilot-49f3f1d9"
+        }
+      ]
+    },
+    {
+      "expectation": "All 10 calls at reasoning=medium succeed",
+      "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+      "lineNumber": 182,
+      "definition": "kbench.assertions.assert_true(",
+      "conversationRequestIds": [
+        {
+          "conversationId": "reasoning-pilot-49f3f1d9"
+        }
+      ]
+    },
+    {
+      "expectation": "All 10 calls at reasoning=high succeed",
+      "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+      "lineNumber": 182,
+      "definition": "kbench.assertions.assert_true(",
+      "conversationRequestIds": [
+        {
+          "conversationId": "reasoning-pilot-49f3f1d9"
+        }
+      ]
+    }
+  ],
+  "pyRunId": "reasoning-pilot-Run #1"
+}

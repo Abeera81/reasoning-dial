@@ -1,0 +1,14 @@
+# Secrets — never commit (holds the Kaggle model-proxy API key)
+.env
+.env.*
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Python
+__pycache__/
+.pytest_cache/
+
+# OS junk
+.DS_Store
+Thumbs.db

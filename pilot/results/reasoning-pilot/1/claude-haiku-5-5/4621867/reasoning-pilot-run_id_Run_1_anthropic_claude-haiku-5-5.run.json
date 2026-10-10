@@ -1,0 +1,1776 @@
+{
+  "taskVersion": {
+    "versionNumber": 1,
+    "name": "reasoning-pilot",
+    "description": "Pilot: does output-token use rise with the reasoning level (low/medium/high)?",
+    "definition": "@kbench.task(\n    name=\"reasoning-pilot\",\n    description=\"Pilot: does output-token use rise with the reasoning level (low/medium/high)?\",\n    version=1,\n)\ndef reasoning_pilot(llm) -> dict:\n    # With reasoning set, Model Proxy returns \"<think>...</think>{json}\" and the\n    # OpenAI SDK's native structured-output parser fails on it before kbench can\n    # strip the think tags (and the call's token usage is lost). Use kbench's\n    # prompted-JSON schema path instead: same schema, parsed after stripping.\n    llm.support_structured_outputs = False\n    calls = []\n    for item in ITEMS:\n        for level in LEVELS:\n            rec = dict(item=item[\"id\"], level=level, expected=item[\"answer\"])\n            with kbench.chats.new(f\"{item['id']}-{level}\") as chat:\n                try:\n                    obj = llm.prompt(\n                        item[\"question\"]\n                        + \"\\nPut only the final answer in the answer field.\",\n                        schema=Answer,\n                        temperature=0,\n                        reasoning=level,\n                    )\n                    rec[\"got\"] = obj.answer\n                    rec[\"correct\"] = normalize(obj.answer) == normalize(item[\"answer\"])\n                    rec[\"error\"] = None\n                except Exception as e:  # record and keep going\n                    rec[\"got\"] = None\n                    rec[\"correct\"] = False\n                    rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n                u = chat.usage\n                rec[\"output_tokens\"] = u.output_tokens\n                rec[\"input_tokens\"] = u.input_tokens\n                rec[\"cost_usd\"] = (\n                    u.total_cost_nanodollars / 1e9\n                    if u.total_cost_nanodollars is not None\n                    else None\n                )\n            print(rec)\n            calls.append(rec)\n\n    summary = {}\n    for level in LEVELS:\n        rs = [c for c in calls if c[\"level\"] == level]\n        toks = [c[\"output_tokens\"] for c in rs if c[\"output_tokens\"] is not None]\n        costs = [c[\"cost_usd\"] for c in rs if c[\"cost_usd\"] is not None]\n        summary[level] = dict(\n            accuracy=sum(c[\"correct\"] for c in rs) / len(rs),\n            mean_output_tokens=sum(toks) / len(toks) if toks else None,\n            mean_cost_usd=sum(costs) / len(costs) if costs else None,\n            n_errors=sum(c[\"error\"] is not None for c in rs),\n        )\n        kbench.assertions.assert_true(\n            summary[level][\"n_errors\"] == 0,\n            expectation=f\"All {len(rs)} calls at reasoning={level} succeed\",\n        )\n    print(summary)\n    return dict(summary=summary, calls=calls)\n"
+  },
+  "modelVersion": {
+    "slug": "anthropic/claude-haiku-5-5"
+  },
+  "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+  "startTime": "2026-10-10T02:59:44.069936Z",
+  "endTime": "2026-10-10T03:00:08.398694Z",
+  "conversations": [
+    {
+      "id": "reasoning-pilot-3d3a58f0",
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-1-low-3a520ed0",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Four meetings A, B, C and D fill the slots 9:00, 10:00, 11:00 and 12:00, one meeting per slot. Constraints: A is earlier than B. C is at 11:00. D is not at 9:00. B is not at 12:00. Which meeting is at 12:00? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"D\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 192,
+            "outputTokens": 147,
+            "inputTokensCostNanodollars": "19200",
+            "outputTokensCostNanodollars": "73500",
+            "totalBackendLatencyMs": "1051"
+          },
+          "id": "sched-1-low-3a520ed0-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 192,
+        "outputTokens": 147,
+        "inputTokensCostNanodollars": "19200",
+        "outputTokensCostNanodollars": "73500",
+        "totalBackendLatencyMs": "1051"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-1-medium-d59e01a7",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Four meetings A, B, C and D fill the slots 9:00, 10:00, 11:00 and 12:00, one meeting per slot. Constraints: A is earlier than B. C is at 11:00. D is not at 9:00. B is not at 12:00. Which meeting is at 12:00? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"D\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 192,
+            "outputTokens": 185,
+            "inputTokensCostNanodollars": "19200",
+            "outputTokensCostNanodollars": "92500",
+            "totalBackendLatencyMs": "986"
+          },
+          "id": "sched-1-medium-d59e01a7-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 192,
+        "outputTokens": 185,
+        "inputTokensCostNanodollars": "19200",
+        "outputTokensCostNanodollars": "92500",
+        "totalBackendLatencyMs": "986"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-1-high-508d3806",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Four meetings A, B, C and D fill the slots 9:00, 10:00, 11:00 and 12:00, one meeting per slot. Constraints: A is earlier than B. C is at 11:00. D is not at 9:00. B is not at 12:00. Which meeting is at 12:00? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"D\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 192,
+            "outputTokens": 183,
+            "inputTokensCostNanodollars": "19200",
+            "outputTokensCostNanodollars": "91500",
+            "totalBackendLatencyMs": "1030"
+          },
+          "id": "sched-1-high-508d3806-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 192,
+        "outputTokens": 183,
+        "inputTokensCostNanodollars": "19200",
+        "outputTokensCostNanodollars": "91500",
+        "totalBackendLatencyMs": "1030"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-2-low-e76d4e4d",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Five people P, Q, R, S and T each give one talk, one per day, Monday to Friday. Constraints: R speaks on Wednesday. P speaks on the day immediately before Q. T does not speak on Monday or Friday. S speaks on a later day than Q. Who speaks on Thursday? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "**T**\n\nLabel the days Monday to Friday as 1 to 5. R speaks on day 3. T must be on day 2 or 4. If T is on day 2, the remaining days 1, 4, 5 cannot give P immediately before Q with S later than Q. So T is on day 4, which forces P on day 1, Q on day 2, and S on day 5.\n\n<br>\n\n{\"answer\": \"T\"}"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 193,
+            "outputTokens": 446,
+            "inputTokensCostNanodollars": "19300",
+            "outputTokensCostNanodollars": "223000",
+            "totalBackendLatencyMs": "2250"
+          },
+          "id": "sched-2-low-e76d4e4d-req-1"
+        },
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Response parsing failed.\nInput Value:\n---\n**T**\n\nLabel the days Monday to Friday as 1 to 5. R speaks on day 3. T must be on day 2 or 4. If T is on day 2, the remaining days 1, 4, 5 cannot give P immediately before Q with S later than Q. So T is on day 4, which forces P on day 1, Q on day 2, and S on day 5.\n\n<br>\n\n{\"answer\": \"T\"}\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---"
+                }
+              ],
+              "role": "CONTENT_ROLE_SYSTEM",
+              "senderName": "System"
+            }
+          ],
+          "id": "sched-2-low-e76d4e4d-req-2"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 193,
+        "outputTokens": 446,
+        "inputTokensCostNanodollars": "19300",
+        "outputTokensCostNanodollars": "223000",
+        "totalBackendLatencyMs": "2250"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-2-medium-5381142d",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Five people P, Q, R, S and T each give one talk, one per day, Monday to Friday. Constraints: R speaks on Wednesday. P speaks on the day immediately before Q. T does not speak on Monday or Friday. S speaks on a later day than Q. Who speaks on Thursday? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "**T**\n\n<answer>T</answer>"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 193,
+            "outputTokens": 291,
+            "inputTokensCostNanodollars": "19300",
+            "outputTokensCostNanodollars": "145500",
+            "totalBackendLatencyMs": "1366"
+          },
+          "id": "sched-2-medium-5381142d-req-1"
+        },
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Response parsing failed.\nInput Value:\n---\n**T**\n\n<answer>T</answer>\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---"
+                }
+              ],
+              "role": "CONTENT_ROLE_SYSTEM",
+              "senderName": "System"
+            }
+          ],
+          "id": "sched-2-medium-5381142d-req-2"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 193,
+        "outputTokens": 291,
+        "inputTokensCostNanodollars": "19300",
+        "outputTokensCostNanodollars": "145500",
+        "totalBackendLatencyMs": "1366"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-2-high-1eba6ea8",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Five people P, Q, R, S and T each give one talk, one per day, Monday to Friday. Constraints: R speaks on Wednesday. P speaks on the day immediately before Q. T does not speak on Monday or Friday. S speaks on a later day than Q. Who speaks on Thursday? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"T\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 193,
+            "outputTokens": 319,
+            "inputTokensCostNanodollars": "19300",
+            "outputTokensCostNanodollars": "159500",
+            "totalBackendLatencyMs": "1710"
+          },
+          "id": "sched-2-high-1eba6ea8-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 193,
+        "outputTokens": 319,
+        "inputTokensCostNanodollars": "19300",
+        "outputTokensCostNanodollars": "159500",
+        "totalBackendLatencyMs": "1710"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-3-low-e2126ae9",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "One worker does three jobs back to back with no breaks, starting at 09:00. Job X takes 2 hours, job Y takes 1 hour, job Z takes 3 hours. Constraints: Z must be done last. Y must be done before X. At what hour on the 24-hour clock does job Z finish? Answer with the hour as an integer only (e.g. 17).\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "Total time = 2 + 1 + 3 = 6 hours, starting at 09:00. Z is last, so all three jobs finish at 15:00.\n\n{\"answer\": \"15\"}"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 203,
+            "outputTokens": 61,
+            "inputTokensCostNanodollars": "20300",
+            "outputTokensCostNanodollars": "30500",
+            "totalBackendLatencyMs": "509"
+          },
+          "id": "sched-3-low-e2126ae9-req-1"
+        },
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Response parsing failed.\nInput Value:\n---\nTotal time = 2 + 1 + 3 = 6 hours, starting at 09:00. Z is last, so all three jobs finish at 15:00.\n\n{\"answer\": \"15\"}\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---"
+                }
+              ],
+              "role": "CONTENT_ROLE_SYSTEM",
+              "senderName": "System"
+            }
+          ],
+          "id": "sched-3-low-e2126ae9-req-2"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 203,
+        "outputTokens": 61,
+        "inputTokensCostNanodollars": "20300",
+        "outputTokensCostNanodollars": "30500",
+        "totalBackendLatencyMs": "509"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-3-medium-c422884a",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "One worker does three jobs back to back with no breaks, starting at 09:00. Job X takes 2 hours, job Y takes 1 hour, job Z takes 3 hours. Constraints: Z must be done last. Y must be done before X. At what hour on the 24-hour clock does job Z finish? Answer with the hour as an integer only (e.g. 17).\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"15\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 203,
+            "outputTokens": 92,
+            "inputTokensCostNanodollars": "20300",
+            "outputTokensCostNanodollars": "46000",
+            "totalBackendLatencyMs": "976"
+          },
+          "id": "sched-3-medium-c422884a-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 203,
+        "outputTokens": 92,
+        "inputTokensCostNanodollars": "20300",
+        "outputTokensCostNanodollars": "46000",
+        "totalBackendLatencyMs": "976"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-3-high-5e31f2d8",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "One worker does three jobs back to back with no breaks, starting at 09:00. Job X takes 2 hours, job Y takes 1 hour, job Z takes 3 hours. Constraints: Z must be done last. Y must be done before X. At what hour on the 24-hour clock does job Z finish? Answer with the hour as an integer only (e.g. 17).\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"15\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 203,
+            "outputTokens": 71,
+            "inputTokensCostNanodollars": "20300",
+            "outputTokensCostNanodollars": "35500",
+            "totalBackendLatencyMs": "673"
+          },
+          "id": "sched-3-high-5e31f2d8-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 203,
+        "outputTokens": 71,
+        "inputTokensCostNanodollars": "20300",
+        "outputTokensCostNanodollars": "35500",
+        "totalBackendLatencyMs": "673"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-4-low-f9b8567b",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Three meetings Alpha, Beta and Gamma are assigned to rooms 1, 2 and 3, one meeting per room. Constraints: Alpha is not in room 1. Alpha is not in room 3. Beta is in a higher-numbered room than Gamma. Gamma is not in room 2. Which room number is Beta in? Answer with the room number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "Alpha must be in room 2 (not 1, not 3). Gamma is not in room 2, so Gamma is in room 1 or 3. Beta must be in a higher room than Gamma. If Gamma is in room 1, Beta is in room 3 (remaining rooms are 1 and 3; Beta must be higher than 1, so Beta is 3). If Gamma is in room 3, Beta would need a room higher than 3, which is impossible. So Gamma is in room 1 and Beta is in room 3.\n\n{\"answer\": \"3\"}"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 204,
+            "outputTokens": 179,
+            "inputTokensCostNanodollars": "20400",
+            "outputTokensCostNanodollars": "89500",
+            "totalBackendLatencyMs": "1080"
+          },
+          "id": "sched-4-low-f9b8567b-req-1"
+        },
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Response parsing failed.\nInput Value:\n---\nAlpha must be in room 2 (not 1, not 3). Gamma is not in room 2, so Gamma is in room 1 or 3. Beta must be in a higher room than Gamma. If Gamma is in room 1, Beta is in room 3 (remaining rooms are 1 and 3; Beta must be higher than 1, so Beta is 3). If Gamma is in room 3, Beta would need a room higher than 3, which is impossible. So Gamma is in room 1 and Beta is in room 3.\n\n{\"answer\": \"3\"}\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---"
+                }
+              ],
+              "role": "CONTENT_ROLE_SYSTEM",
+              "senderName": "System"
+            }
+          ],
+          "id": "sched-4-low-f9b8567b-req-2"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 204,
+        "outputTokens": 179,
+        "inputTokensCostNanodollars": "20400",
+        "outputTokensCostNanodollars": "89500",
+        "totalBackendLatencyMs": "1080"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-4-medium-fe70422b",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Three meetings Alpha, Beta and Gamma are assigned to rooms 1, 2 and 3, one meeting per room. Constraints: Alpha is not in room 1. Alpha is not in room 3. Beta is in a higher-numbered room than Gamma. Gamma is not in room 2. Which room number is Beta in? Answer with the room number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"3\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 204,
+            "outputTokens": 124,
+            "inputTokensCostNanodollars": "20400",
+            "outputTokensCostNanodollars": "62000",
+            "totalBackendLatencyMs": "818"
+          },
+          "id": "sched-4-medium-fe70422b-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 204,
+        "outputTokens": 124,
+        "inputTokensCostNanodollars": "20400",
+        "outputTokensCostNanodollars": "62000",
+        "totalBackendLatencyMs": "818"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-4-high-34cbf7bb",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Three meetings Alpha, Beta and Gamma are assigned to rooms 1, 2 and 3, one meeting per room. Constraints: Alpha is not in room 1. Alpha is not in room 3. Beta is in a higher-numbered room than Gamma. Gamma is not in room 2. Which room number is Beta in? Answer with the room number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"3\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 204,
+            "outputTokens": 86,
+            "inputTokensCostNanodollars": "20400",
+            "outputTokensCostNanodollars": "43000",
+            "totalBackendLatencyMs": "560"
+          },
+          "id": "sched-4-high-34cbf7bb-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 204,
+        "outputTokens": 86,
+        "inputTokensCostNanodollars": "20400",
+        "outputTokensCostNanodollars": "43000",
+        "totalBackendLatencyMs": "560"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-1-low-76164afd",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Pens cost $3 each. Maria buys 7 pens and pays with a $50 bill. How many dollars of change does she get? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"29\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 135,
+            "outputTokens": 39,
+            "inputTokensCostNanodollars": "13500",
+            "outputTokensCostNanodollars": "19500",
+            "totalBackendLatencyMs": "421"
+          },
+          "id": "arith-1-low-76164afd-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 135,
+        "outputTokens": 39,
+        "inputTokensCostNanodollars": "13500",
+        "outputTokensCostNanodollars": "19500",
+        "totalBackendLatencyMs": "421"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-1-medium-715a2922",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Pens cost $3 each. Maria buys 7 pens and pays with a $50 bill. How many dollars of change does she get? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"29\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 135,
+            "outputTokens": 39,
+            "inputTokensCostNanodollars": "13500",
+            "outputTokensCostNanodollars": "19500",
+            "totalBackendLatencyMs": "528"
+          },
+          "id": "arith-1-medium-715a2922-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 135,
+        "outputTokens": 39,
+        "inputTokensCostNanodollars": "13500",
+        "outputTokensCostNanodollars": "19500",
+        "totalBackendLatencyMs": "528"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-1-high-dcd6db3e",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Pens cost $3 each. Maria buys 7 pens and pays with a $50 bill. How many dollars of change does she get? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"29\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 135,
+            "outputTokens": 40,
+            "inputTokensCostNanodollars": "13500",
+            "outputTokensCostNanodollars": "20000",
+            "totalBackendLatencyMs": "335"
+          },
+          "id": "arith-1-high-dcd6db3e-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 135,
+        "outputTokens": 40,
+        "inputTokensCostNanodollars": "13500",
+        "outputTokensCostNanodollars": "20000",
+        "totalBackendLatencyMs": "335"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-2-low-be78c3b3",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A train travels at 60 km/h for 2.5 hours, then at 80 km/h for 1.5 hours. How many kilometres does it travel in total? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"270\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 143,
+            "outputTokens": 53,
+            "inputTokensCostNanodollars": "14300",
+            "outputTokensCostNanodollars": "26500",
+            "totalBackendLatencyMs": "550"
+          },
+          "id": "arith-2-low-be78c3b3-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 143,
+        "outputTokens": 53,
+        "inputTokensCostNanodollars": "14300",
+        "outputTokensCostNanodollars": "26500",
+        "totalBackendLatencyMs": "550"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-2-medium-5fb0e221",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A train travels at 60 km/h for 2.5 hours, then at 80 km/h for 1.5 hours. How many kilometres does it travel in total? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"270\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 143,
+            "outputTokens": 34,
+            "inputTokensCostNanodollars": "14300",
+            "outputTokensCostNanodollars": "17000",
+            "totalBackendLatencyMs": "448"
+          },
+          "id": "arith-2-medium-5fb0e221-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 143,
+        "outputTokens": 34,
+        "inputTokensCostNanodollars": "14300",
+        "outputTokensCostNanodollars": "17000",
+        "totalBackendLatencyMs": "448"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-2-high-18dee204",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A train travels at 60 km/h for 2.5 hours, then at 80 km/h for 1.5 hours. How many kilometres does it travel in total? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"270\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 143,
+            "outputTokens": 38,
+            "inputTokensCostNanodollars": "14300",
+            "outputTokensCostNanodollars": "19000",
+            "totalBackendLatencyMs": "333"
+          },
+          "id": "arith-2-high-18dee204-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 143,
+        "outputTokens": 38,
+        "inputTokensCostNanodollars": "14300",
+        "outputTokensCostNanodollars": "19000",
+        "totalBackendLatencyMs": "333"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-3-low-65809843",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A 240-litre tank is three-quarters full. Then 45 litres are drained out. How many litres remain in the tank? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "Three-quarters of 240 is 180 litres. Draining 45 litres leaves 135 litres.\n\n{\"answer\": \"135\"}"
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 132,
+            "outputTokens": 46,
+            "inputTokensCostNanodollars": "13200",
+            "outputTokensCostNanodollars": "23000",
+            "totalBackendLatencyMs": "631"
+          },
+          "id": "arith-3-low-65809843-req-1"
+        },
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Response parsing failed.\nInput Value:\n---\nThree-quarters of 240 is 180 litres. Draining 45 litres leaves 135 litres.\n\n{\"answer\": \"135\"}\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---"
+                }
+              ],
+              "role": "CONTENT_ROLE_SYSTEM",
+              "senderName": "System"
+            }
+          ],
+          "id": "arith-3-low-65809843-req-2"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 132,
+        "outputTokens": 46,
+        "inputTokensCostNanodollars": "13200",
+        "outputTokensCostNanodollars": "23000",
+        "totalBackendLatencyMs": "631"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-3-medium-22495d8b",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A 240-litre tank is three-quarters full. Then 45 litres are drained out. How many litres remain in the tank? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"135\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 132,
+            "outputTokens": 37,
+            "inputTokensCostNanodollars": "13200",
+            "outputTokensCostNanodollars": "18500",
+            "totalBackendLatencyMs": "422"
+          },
+          "id": "arith-3-medium-22495d8b-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 132,
+        "outputTokens": 37,
+        "inputTokensCostNanodollars": "13200",
+        "outputTokensCostNanodollars": "18500",
+        "totalBackendLatencyMs": "422"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-3-high-b94cb4f6",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A 240-litre tank is three-quarters full. Then 45 litres are drained out. How many litres remain in the tank? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"135\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 132,
+            "outputTokens": 37,
+            "inputTokensCostNanodollars": "13200",
+            "outputTokensCostNanodollars": "18500",
+            "totalBackendLatencyMs": "404"
+          },
+          "id": "arith-3-high-b94cb4f6-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 132,
+        "outputTokens": 37,
+        "inputTokensCostNanodollars": "13200",
+        "outputTokensCostNanodollars": "18500",
+        "totalBackendLatencyMs": "404"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-1-low-ce971aa9",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The Larkspur Bridge, completed in 1887, spans the Orrin River. It was designed by engineer Helena Voss and was originally painted green before being repainted red in 1952.\n\nQuestion: In what year was the bridge repainted red? Answer with the year only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"1952\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 173,
+            "outputTokens": 12,
+            "inputTokensCostNanodollars": "17300",
+            "outputTokensCostNanodollars": "6000",
+            "totalBackendLatencyMs": "436"
+          },
+          "id": "passage-1-low-ce971aa9-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 173,
+        "outputTokens": 12,
+        "inputTokensCostNanodollars": "17300",
+        "outputTokensCostNanodollars": "6000",
+        "totalBackendLatencyMs": "436"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-1-medium-c881b40b",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The Larkspur Bridge, completed in 1887, spans the Orrin River. It was designed by engineer Helena Voss and was originally painted green before being repainted red in 1952.\n\nQuestion: In what year was the bridge repainted red? Answer with the year only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"1952\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 173,
+            "outputTokens": 12,
+            "inputTokensCostNanodollars": "17300",
+            "outputTokensCostNanodollars": "6000",
+            "totalBackendLatencyMs": "382"
+          },
+          "id": "passage-1-medium-c881b40b-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 173,
+        "outputTokens": 12,
+        "inputTokensCostNanodollars": "17300",
+        "outputTokensCostNanodollars": "6000",
+        "totalBackendLatencyMs": "382"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-1-high-200ac46f",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The Larkspur Bridge, completed in 1887, spans the Orrin River. It was designed by engineer Helena Voss and was originally painted green before being repainted red in 1952.\n\nQuestion: In what year was the bridge repainted red? Answer with the year only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"1952\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 173,
+            "outputTokens": 12,
+            "inputTokensCostNanodollars": "17300",
+            "outputTokensCostNanodollars": "6000",
+            "totalBackendLatencyMs": "252"
+          },
+          "id": "passage-1-high-200ac46f-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 173,
+        "outputTokens": 12,
+        "inputTokensCostNanodollars": "17300",
+        "outputTokensCostNanodollars": "6000",
+        "totalBackendLatencyMs": "252"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-2-low-134cfc5a",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The village of Tamsworth holds its harvest fair every October. The fair's oldest event is the turnip-carving contest, first held in 1903. The 2019 winner of the contest was a baker named Ottilie Marsh.\n\nQuestion: What was the profession of the 2019 winner? Answer with one word only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"Baker\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 187,
+            "outputTokens": 13,
+            "inputTokensCostNanodollars": "18700",
+            "outputTokensCostNanodollars": "6500",
+            "totalBackendLatencyMs": "246"
+          },
+          "id": "passage-2-low-134cfc5a-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 187,
+        "outputTokens": 13,
+        "inputTokensCostNanodollars": "18700",
+        "outputTokensCostNanodollars": "6500",
+        "totalBackendLatencyMs": "246"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-2-medium-0f584b9a",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The village of Tamsworth holds its harvest fair every October. The fair's oldest event is the turnip-carving contest, first held in 1903. The 2019 winner of the contest was a baker named Ottilie Marsh.\n\nQuestion: What was the profession of the 2019 winner? Answer with one word only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"Baker\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 187,
+            "outputTokens": 46,
+            "inputTokensCostNanodollars": "18700",
+            "outputTokensCostNanodollars": "23000",
+            "totalBackendLatencyMs": "427"
+          },
+          "id": "passage-2-medium-0f584b9a-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 187,
+        "outputTokens": 46,
+        "inputTokensCostNanodollars": "18700",
+        "outputTokensCostNanodollars": "23000",
+        "totalBackendLatencyMs": "427"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-2-high-87e8da2b",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The village of Tamsworth holds its harvest fair every October. The fair's oldest event is the turnip-carving contest, first held in 1903. The 2019 winner of the contest was a baker named Ottilie Marsh.\n\nQuestion: What was the profession of the 2019 winner? Answer with one word only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"Baker\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 187,
+            "outputTokens": 13,
+            "inputTokensCostNanodollars": "18700",
+            "outputTokensCostNanodollars": "6500",
+            "totalBackendLatencyMs": "329"
+          },
+          "id": "passage-2-high-87e8da2b-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 187,
+        "outputTokens": 13,
+        "inputTokensCostNanodollars": "18700",
+        "outputTokensCostNanodollars": "6500",
+        "totalBackendLatencyMs": "329"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-3-low-a303ebaf",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: Kestrel Labs released three versions of its Finch sensor: Finch 1 in 2014, Finch 2 in 2017, and Finch 3 in 2021. Only Finch 2 was waterproof.\n\nQuestion: Which Finch version was waterproof? Answer with the version number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"2\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 183,
+            "outputTokens": 16,
+            "inputTokensCostNanodollars": "18300",
+            "outputTokensCostNanodollars": "8000",
+            "totalBackendLatencyMs": "457"
+          },
+          "id": "passage-3-low-a303ebaf-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 183,
+        "outputTokens": 16,
+        "inputTokensCostNanodollars": "18300",
+        "outputTokensCostNanodollars": "8000",
+        "totalBackendLatencyMs": "457"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-3-medium-11adab5a",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: Kestrel Labs released three versions of its Finch sensor: Finch 1 in 2014, Finch 2 in 2017, and Finch 3 in 2021. Only Finch 2 was waterproof.\n\nQuestion: Which Finch version was waterproof? Answer with the version number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"2\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 183,
+            "outputTokens": 13,
+            "inputTokensCostNanodollars": "18300",
+            "outputTokensCostNanodollars": "6500",
+            "totalBackendLatencyMs": "366"
+          },
+          "id": "passage-3-medium-11adab5a-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 183,
+        "outputTokens": 13,
+        "inputTokensCostNanodollars": "18300",
+        "outputTokensCostNanodollars": "6500",
+        "totalBackendLatencyMs": "366"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-3-high-fe74139e",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: Kestrel Labs released three versions of its Finch sensor: Finch 1 in 2014, Finch 2 in 2017, and Finch 3 in 2021. Only Finch 2 was waterproof.\n\nQuestion: Which Finch version was waterproof? Answer with the version number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            },
+            {
+              "parts": [
+                {
+                  "text": "\"{\\\"answer\\\": \\\"2\\\"}\""
+                }
+              ],
+              "role": "CONTENT_ROLE_ASSISTANT",
+              "senderName": "anthropic/claude-haiku-5-5"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 183,
+            "outputTokens": 11,
+            "inputTokensCostNanodollars": "18300",
+            "outputTokensCostNanodollars": "5500",
+            "totalBackendLatencyMs": "352"
+          },
+          "id": "passage-3-high-fe74139e-req-1"
+        }
+      ],
+      "metrics": {
+        "inputTokens": 183,
+        "outputTokens": 11,
+        "inputTokensCostNanodollars": "18300",
+        "outputTokensCostNanodollars": "5500",
+        "totalBackendLatencyMs": "352"
+      },
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    }
+  ],
+  "results": [
+    {
+      "type": "AGGREGATED",
+      "dictResult": {
+        "calls": [
+          {
+            "output_tokens": 147.0,
+            "got": "D",
+            "cost_usd": 9.27e-05,
+            "item": "sched-1",
+            "correct": true,
+            "level": "low",
+            "error": null,
+            "input_tokens": 192.0,
+            "expected": "D"
+          },
+          {
+            "output_tokens": 185.0,
+            "got": "D",
+            "cost_usd": 0.0001117,
+            "item": "sched-1",
+            "correct": true,
+            "level": "medium",
+            "error": null,
+            "input_tokens": 192.0,
+            "expected": "D"
+          },
+          {
+            "output_tokens": 183.0,
+            "got": "D",
+            "cost_usd": 0.0001107,
+            "item": "sched-1",
+            "correct": true,
+            "level": "high",
+            "error": null,
+            "input_tokens": 192.0,
+            "expected": "D"
+          },
+          {
+            "output_tokens": 446.0,
+            "got": null,
+            "cost_usd": 0.0002423,
+            "item": "sched-2",
+            "correct": false,
+            "level": "low",
+            "error": "ResponseParsingError: Response parsing failed.\nInput Value:\n---\n**T**\n\nLabel the days Monday to Friday as 1 to 5. R speaks on day 3. T must be on day 2 or 4. If T is on day 2, the remaining days 1, 4, 5 cannot give P immediately before Q with S later than Q. So T is on day 4, which forces P on day 1, Q on day 2, and S on day 5.\n\n<br>\n\n{\"answer\": \"T\"}\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---",
+            "input_tokens": 193.0,
+            "expected": "T"
+          },
+          {
+            "output_tokens": 291.0,
+            "got": null,
+            "cost_usd": 0.0001648,
+            "item": "sched-2",
+            "correct": false,
+            "level": "medium",
+            "error": "ResponseParsingError: Response parsing failed.\nInput Value:\n---\n**T**\n\n<answer>T</answer>\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---",
+            "input_tokens": 193.0,
+            "expected": "T"
+          },
+          {
+            "output_tokens": 319.0,
+            "got": "T",
+            "cost_usd": 0.0001788,
+            "item": "sched-2",
+            "correct": true,
+            "level": "high",
+            "error": null,
+            "input_tokens": 193.0,
+            "expected": "T"
+          },
+          {
+            "output_tokens": 61.0,
+            "got": null,
+            "cost_usd": 5.08e-05,
+            "item": "sched-3",
+            "correct": false,
+            "level": "low",
+            "error": "ResponseParsingError: Response parsing failed.\nInput Value:\n---\nTotal time = 2 + 1 + 3 = 6 hours, starting at 09:00. Z is last, so all three jobs finish at 15:00.\n\n{\"answer\": \"15\"}\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---",
+            "input_tokens": 203.0,
+            "expected": "15"
+          },
+          {
+            "output_tokens": 92.0,
+            "got": "15",
+            "cost_usd": 6.63e-05,
+            "item": "sched-3",
+            "correct": true,
+            "level": "medium",
+            "error": null,
+            "input_tokens": 203.0,
+            "expected": "15"
+          },
+          {
+            "output_tokens": 71.0,
+            "got": "15",
+            "cost_usd": 5.58e-05,
+            "item": "sched-3",
+            "correct": true,
+            "level": "high",
+            "error": null,
+            "input_tokens": 203.0,
+            "expected": "15"
+          },
+          {
+            "output_tokens": 179.0,
+            "got": null,
+            "cost_usd": 0.0001099,
+            "item": "sched-4",
+            "correct": false,
+            "level": "low",
+            "error": "ResponseParsingError: Response parsing failed.\nInput Value:\n---\nAlpha must be in room 2 (not 1, not 3). Gamma is not in room 2, so Gamma is in room 1 or 3. Beta must be in a higher room than Gamma. If Gamma is in room 1, Beta is in room 3 (remaining rooms are 1 and 3; Beta must be higher than 1, so Beta is 3). If Gamma is in room 3, Beta would need a room higher than 3, which is impossible. So Gamma is in room 1 and Beta is in room 3.\n\n{\"answer\": \"3\"}\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---",
+            "input_tokens": 204.0,
+            "expected": "3"
+          },
+          {
+            "output_tokens": 124.0,
+            "got": "3",
+            "cost_usd": 8.24e-05,
+            "item": "sched-4",
+            "correct": true,
+            "level": "medium",
+            "error": null,
+            "input_tokens": 204.0,
+            "expected": "3"
+          },
+          {
+            "output_tokens": 86.0,
+            "got": "3",
+            "cost_usd": 6.34e-05,
+            "item": "sched-4",
+            "correct": true,
+            "level": "high",
+            "error": null,
+            "input_tokens": 204.0,
+            "expected": "3"
+          },
+          {
+            "output_tokens": 39.0,
+            "got": "29",
+            "cost_usd": 3.3e-05,
+            "item": "arith-1",
+            "correct": true,
+            "level": "low",
+            "error": null,
+            "input_tokens": 135.0,
+            "expected": "29"
+          },
+          {
+            "output_tokens": 39.0,
+            "got": "29",
+            "cost_usd": 3.3e-05,
+            "item": "arith-1",
+            "correct": true,
+            "level": "medium",
+            "error": null,
+            "input_tokens": 135.0,
+            "expected": "29"
+          },
+          {
+            "output_tokens": 40.0,
+            "got": "29",
+            "cost_usd": 3.35e-05,
+            "item": "arith-1",
+            "correct": true,
+            "level": "high",
+            "error": null,
+            "input_tokens": 135.0,
+            "expected": "29"
+          },
+          {
+            "output_tokens": 53.0,
+            "got": "270",
+            "cost_usd": 4.08e-05,
+            "item": "arith-2",
+            "correct": true,
+            "level": "low",
+            "error": null,
+            "input_tokens": 143.0,
+            "expected": "270"
+          },
+          {
+            "output_tokens": 34.0,
+            "got": "270",
+            "cost_usd": 3.13e-05,
+            "item": "arith-2",
+            "correct": true,
+            "level": "medium",
+            "error": null,
+            "input_tokens": 143.0,
+            "expected": "270"
+          },
+          {
+            "output_tokens": 38.0,
+            "got": "270",
+            "cost_usd": 3.33e-05,
+            "item": "arith-2",
+            "correct": true,
+            "level": "high",
+            "error": null,
+            "input_tokens": 143.0,
+            "expected": "270"
+          },
+          {
+            "output_tokens": 46.0,
+            "got": null,
+            "cost_usd": 3.62e-05,
+            "item": "arith-3",
+            "correct": false,
+            "level": "low",
+            "error": "ResponseParsingError: Response parsing failed.\nInput Value:\n---\nThree-quarters of 240 is 180 litres. Draining 45 litres leaves 135 litres.\n\n{\"answer\": \"135\"}\n---\nTarget Schema:\n---\n{\n  \"properties\": {\n    \"answer\": {\n      \"title\": \"Answer\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"answer\"\n  ],\n  \"title\": \"Answer\",\n  \"type\": \"object\"\n}\n---\nParsing Error:\n---\nInvalid JSON Expecting value: line 1 column 1 (char 0)\n---",
+            "input_tokens": 132.0,
+            "expected": "135"
+          },
+          {
+            "output_tokens": 37.0,
+            "got": "135",
+            "cost_usd": 3.17e-05,
+            "item": "arith-3",
+            "correct": true,
+            "level": "medium",
+            "error": null,
+            "input_tokens": 132.0,
+            "expected": "135"
+          },
+          {
+            "output_tokens": 37.0,
+            "got": "135",
+            "cost_usd": 3.17e-05,
+            "item": "arith-3",
+            "correct": true,
+            "level": "high",
+            "error": null,
+            "input_tokens": 132.0,
+            "expected": "135"
+          },
+          {
+            "output_tokens": 12.0,
+            "got": "1952",
+            "cost_usd": 2.33e-05,
+            "item": "passage-1",
+            "correct": true,
+            "level": "low",
+            "error": null,
+            "input_tokens": 173.0,
+            "expected": "1952"
+          },
+          {
+            "output_tokens": 12.0,
+            "got": "1952",
+            "cost_usd": 2.33e-05,
+            "item": "passage-1",
+            "correct": true,
+            "level": "medium",
+            "error": null,
+            "input_tokens": 173.0,
+            "expected": "1952"
+          },
+          {
+            "output_tokens": 12.0,
+            "got": "1952",
+            "cost_usd": 2.33e-05,
+            "item": "passage-1",
+            "correct": true,
+            "level": "high",
+            "error": null,
+            "input_tokens": 173.0,
+            "expected": "1952"
+          },
+          {
+            "output_tokens": 13.0,
+            "got": "Baker",
+            "cost_usd": 2.52e-05,
+            "item": "passage-2",
+            "correct": true,
+            "level": "low",
+            "error": null,
+            "input_tokens": 187.0,
+            "expected": "baker"
+          },
+          {
+            "output_tokens": 46.0,
+            "got": "Baker",
+            "cost_usd": 4.17e-05,
+            "item": "passage-2",
+            "correct": true,
+            "level": "medium",
+            "error": null,
+            "input_tokens": 187.0,
+            "expected": "baker"
+          },
+          {
+            "output_tokens": 13.0,
+            "got": "Baker",
+            "cost_usd": 2.52e-05,
+            "item": "passage-2",
+            "correct": true,
+            "level": "high",
+            "error": null,
+            "input_tokens": 187.0,
+            "expected": "baker"
+          },
+          {
+            "output_tokens": 16.0,
+            "got": "2",
+            "cost_usd": 2.63e-05,
+            "item": "passage-3",
+            "correct": true,
+            "level": "low",
+            "error": null,
+            "input_tokens": 183.0,
+            "expected": "2"
+          },
+          {
+            "output_tokens": 13.0,
+            "got": "2",
+            "cost_usd": 2.48e-05,
+            "item": "passage-3",
+            "correct": true,
+            "level": "medium",
+            "error": null,
+            "input_tokens": 183.0,
+            "expected": "2"
+          },
+          {
+            "output_tokens": 11.0,
+            "got": "2",
+            "cost_usd": 2.38e-05,
+            "item": "passage-3",
+            "correct": true,
+            "level": "high",
+            "error": null,
+            "input_tokens": 183.0,
+            "expected": "2"
+          }
+        ],
+        "summary": {
+          "low": {
+            "accuracy": 0.6,
+            "mean_output_tokens": 101.2,
+            "n_errors": 4.0,
+            "mean_cost_usd": 6.805e-05
+          },
+          "high": {
+            "accuracy": 1.0,
+            "mean_output_tokens": 81.0,
+            "n_errors": 0.0,
+            "mean_cost_usd": 5.7950000000000006e-05
+          },
+          "medium": {
+            "accuracy": 0.9,
+            "mean_output_tokens": 87.3,
+            "n_errors": 1.0,
+            "mean_cost_usd": 6.11e-05
+          }
+        }
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "expectation": "All 10 calls at reasoning=low succeed",
+      "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+      "lineNumber": 182,
+      "definition": "kbench.assertions.assert_true(",
+      "conversationRequestIds": [
+        {
+          "conversationId": "reasoning-pilot-3d3a58f0"
+        }
+      ]
+    },
+    {
+      "expectation": "All 10 calls at reasoning=medium succeed",
+      "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+      "lineNumber": 182,
+      "definition": "kbench.assertions.assert_true(",
+      "conversationRequestIds": [
+        {
+          "conversationId": "reasoning-pilot-3d3a58f0"
+        }
+      ]
+    },
+    {
+      "expectation": "All 10 calls at reasoning=high succeed",
+      "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+      "lineNumber": 182,
+      "definition": "kbench.assertions.assert_true(",
+      "conversationRequestIds": [
+        {
+          "conversationId": "reasoning-pilot-3d3a58f0"
+        }
+      ]
+    }
+  ],
+  "pyRunId": "reasoning-pilot-Run #1"
+}

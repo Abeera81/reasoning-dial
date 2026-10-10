@@ -1,0 +1,1046 @@
+{
+  "taskVersion": {
+    "versionNumber": 1,
+    "name": "reasoning-pilot",
+    "description": "Pilot: does output-token use rise with the reasoning level (low/medium/high)?",
+    "definition": "@kbench.task(\n    name=\"reasoning-pilot\",\n    description=\"Pilot: does output-token use rise with the reasoning level (low/medium/high)?\",\n    version=1,\n)\ndef reasoning_pilot(llm) -> dict:\n    # With reasoning set, Model Proxy returns \"<think>...</think>{json}\" and the\n    # OpenAI SDK's native structured-output parser fails on it before kbench can\n    # strip the think tags (and the call's token usage is lost). Use kbench's\n    # prompted-JSON schema path instead: same schema, parsed after stripping.\n    llm.support_structured_outputs = False\n    calls = []\n    for item in ITEMS:\n        for level in LEVELS:\n            rec = dict(item=item[\"id\"], level=level, expected=item[\"answer\"])\n            with kbench.chats.new(f\"{item['id']}-{level}\") as chat:\n                try:\n                    obj = llm.prompt(\n                        item[\"question\"]\n                        + \"\\nPut only the final answer in the answer field.\",\n                        schema=Answer,\n                        temperature=0,\n                        reasoning=level,\n                    )\n                    rec[\"got\"] = obj.answer\n                    rec[\"correct\"] = normalize(obj.answer) == normalize(item[\"answer\"])\n                    rec[\"error\"] = None\n                except Exception as e:  # record and keep going\n                    rec[\"got\"] = None\n                    rec[\"correct\"] = False\n                    rec[\"error\"] = f\"{type(e).__name__}: {e}\"\n                u = chat.usage\n                rec[\"output_tokens\"] = u.output_tokens\n                rec[\"input_tokens\"] = u.input_tokens\n                rec[\"cost_usd\"] = (\n                    u.total_cost_nanodollars / 1e9\n                    if u.total_cost_nanodollars is not None\n                    else None\n                )\n            print(rec)\n            calls.append(rec)\n\n    summary = {}\n    for level in LEVELS:\n        rs = [c for c in calls if c[\"level\"] == level]\n        toks = [c[\"output_tokens\"] for c in rs if c[\"output_tokens\"] is not None]\n        costs = [c[\"cost_usd\"] for c in rs if c[\"cost_usd\"] is not None]\n        summary[level] = dict(\n            accuracy=sum(c[\"correct\"] for c in rs) / len(rs),\n            mean_output_tokens=sum(toks) / len(toks) if toks else None,\n            mean_cost_usd=sum(costs) / len(costs) if costs else None,\n            n_errors=sum(c[\"error\"] is not None for c in rs),\n        )\n        kbench.assertions.assert_true(\n            summary[level][\"n_errors\"] == 0,\n            expectation=f\"All {len(rs)} calls at reasoning={level} succeed\",\n        )\n    print(summary)\n    return dict(summary=summary, calls=calls)\n"
+  },
+  "modelVersion": {
+    "slug": "xai/grok-4.20-0309-non-reasoning"
+  },
+  "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+  "startTime": "2026-10-10T02:59:53.068708Z",
+  "endTime": "2026-10-10T03:01:30.373917Z",
+  "conversations": [
+    {
+      "id": "reasoning-pilot-c9478ccf",
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-1-low-ea8057d5",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Four meetings A, B, C and D fill the slots 9:00, 10:00, 11:00 and 12:00, one meeting per slot. Constraints: A is earlier than B. C is at 11:00. D is not at 9:00. B is not at 12:00. Which meeting is at 12:00? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "sched-1-low-ea8057d5-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-1-medium-ed0a109d",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Four meetings A, B, C and D fill the slots 9:00, 10:00, 11:00 and 12:00, one meeting per slot. Constraints: A is earlier than B. C is at 11:00. D is not at 9:00. B is not at 12:00. Which meeting is at 12:00? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "sched-1-medium-ed0a109d-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-1-high-8735a24c",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Four meetings A, B, C and D fill the slots 9:00, 10:00, 11:00 and 12:00, one meeting per slot. Constraints: A is earlier than B. C is at 11:00. D is not at 9:00. B is not at 12:00. Which meeting is at 12:00? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "sched-1-high-8735a24c-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-2-low-091137e1",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Five people P, Q, R, S and T each give one talk, one per day, Monday to Friday. Constraints: R speaks on Wednesday. P speaks on the day immediately before Q. T does not speak on Monday or Friday. S speaks on a later day than Q. Who speaks on Thursday? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "sched-2-low-091137e1-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-2-medium-821e209f",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Five people P, Q, R, S and T each give one talk, one per day, Monday to Friday. Constraints: R speaks on Wednesday. P speaks on the day immediately before Q. T does not speak on Monday or Friday. S speaks on a later day than Q. Who speaks on Thursday? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "sched-2-medium-821e209f-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-2-high-06a9fc47",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Five people P, Q, R, S and T each give one talk, one per day, Monday to Friday. Constraints: R speaks on Wednesday. P speaks on the day immediately before Q. T does not speak on Monday or Friday. S speaks on a later day than Q. Who speaks on Thursday? Answer with the single letter only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "sched-2-high-06a9fc47-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-3-low-92b41d50",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "One worker does three jobs back to back with no breaks, starting at 09:00. Job X takes 2 hours, job Y takes 1 hour, job Z takes 3 hours. Constraints: Z must be done last. Y must be done before X. At what hour on the 24-hour clock does job Z finish? Answer with the hour as an integer only (e.g. 17).\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "sched-3-low-92b41d50-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-3-medium-9af62cba",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "One worker does three jobs back to back with no breaks, starting at 09:00. Job X takes 2 hours, job Y takes 1 hour, job Z takes 3 hours. Constraints: Z must be done last. Y must be done before X. At what hour on the 24-hour clock does job Z finish? Answer with the hour as an integer only (e.g. 17).\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "sched-3-medium-9af62cba-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-3-high-86ebc036",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "One worker does three jobs back to back with no breaks, starting at 09:00. Job X takes 2 hours, job Y takes 1 hour, job Z takes 3 hours. Constraints: Z must be done last. Y must be done before X. At what hour on the 24-hour clock does job Z finish? Answer with the hour as an integer only (e.g. 17).\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "sched-3-high-86ebc036-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-4-low-497f0aa7",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Three meetings Alpha, Beta and Gamma are assigned to rooms 1, 2 and 3, one meeting per room. Constraints: Alpha is not in room 1. Alpha is not in room 3. Beta is in a higher-numbered room than Gamma. Gamma is not in room 2. Which room number is Beta in? Answer with the room number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "sched-4-low-497f0aa7-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-4-medium-4fd214ce",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Three meetings Alpha, Beta and Gamma are assigned to rooms 1, 2 and 3, one meeting per room. Constraints: Alpha is not in room 1. Alpha is not in room 3. Beta is in a higher-numbered room than Gamma. Gamma is not in room 2. Which room number is Beta in? Answer with the room number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "sched-4-medium-4fd214ce-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "sched-4-high-1d6d523b",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Three meetings Alpha, Beta and Gamma are assigned to rooms 1, 2 and 3, one meeting per room. Constraints: Alpha is not in room 1. Alpha is not in room 3. Beta is in a higher-numbered room than Gamma. Gamma is not in room 2. Which room number is Beta in? Answer with the room number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "sched-4-high-1d6d523b-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-1-low-333959f0",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Pens cost $3 each. Maria buys 7 pens and pays with a $50 bill. How many dollars of change does she get? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "arith-1-low-333959f0-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-1-medium-1cc90c99",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Pens cost $3 each. Maria buys 7 pens and pays with a $50 bill. How many dollars of change does she get? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "arith-1-medium-1cc90c99-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-1-high-d217ef6e",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Pens cost $3 each. Maria buys 7 pens and pays with a $50 bill. How many dollars of change does she get? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "arith-1-high-d217ef6e-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-2-low-329486ad",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A train travels at 60 km/h for 2.5 hours, then at 80 km/h for 1.5 hours. How many kilometres does it travel in total? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "arith-2-low-329486ad-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-2-medium-57474c96",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A train travels at 60 km/h for 2.5 hours, then at 80 km/h for 1.5 hours. How many kilometres does it travel in total? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "arith-2-medium-57474c96-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-2-high-35f41897",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A train travels at 60 km/h for 2.5 hours, then at 80 km/h for 1.5 hours. How many kilometres does it travel in total? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "arith-2-high-35f41897-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-3-low-a6523f0c",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A 240-litre tank is three-quarters full. Then 45 litres are drained out. How many litres remain in the tank? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "arith-3-low-a6523f0c-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-3-medium-ba4b3bd2",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A 240-litre tank is three-quarters full. Then 45 litres are drained out. How many litres remain in the tank? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "arith-3-medium-ba4b3bd2-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "arith-3-high-18c14b4e",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "A 240-litre tank is three-quarters full. Then 45 litres are drained out. How many litres remain in the tank? Answer with the number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "arith-3-high-18c14b4e-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-1-low-9b4092ff",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The Larkspur Bridge, completed in 1887, spans the Orrin River. It was designed by engineer Helena Voss and was originally painted green before being repainted red in 1952.\n\nQuestion: In what year was the bridge repainted red? Answer with the year only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "passage-1-low-9b4092ff-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-1-medium-99a54227",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The Larkspur Bridge, completed in 1887, spans the Orrin River. It was designed by engineer Helena Voss and was originally painted green before being repainted red in 1952.\n\nQuestion: In what year was the bridge repainted red? Answer with the year only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "passage-1-medium-99a54227-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-1-high-0b57d93b",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The Larkspur Bridge, completed in 1887, spans the Orrin River. It was designed by engineer Helena Voss and was originally painted green before being repainted red in 1952.\n\nQuestion: In what year was the bridge repainted red? Answer with the year only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "passage-1-high-0b57d93b-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-2-low-7a64e993",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The village of Tamsworth holds its harvest fair every October. The fair's oldest event is the turnip-carving contest, first held in 1903. The 2019 winner of the contest was a baker named Ottilie Marsh.\n\nQuestion: What was the profession of the 2019 winner? Answer with one word only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "passage-2-low-7a64e993-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-2-medium-5ee0439d",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The village of Tamsworth holds its harvest fair every October. The fair's oldest event is the turnip-carving contest, first held in 1903. The 2019 winner of the contest was a baker named Ottilie Marsh.\n\nQuestion: What was the profession of the 2019 winner? Answer with one word only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "passage-2-medium-5ee0439d-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-2-high-cf42b8f4",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: The village of Tamsworth holds its harvest fair every October. The fair's oldest event is the turnip-carving contest, first held in 1903. The 2019 winner of the contest was a baker named Ottilie Marsh.\n\nQuestion: What was the profession of the 2019 winner? Answer with one word only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "passage-2-high-cf42b8f4-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-3-low-07eb9bd5",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: Kestrel Labs released three versions of its Finch sensor: Finch 1 in 2014, Finch 2 in 2017, and Finch 3 in 2021. Only Finch 2 was waterproof.\n\nQuestion: Which Finch version was waterproof? Answer with the version number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "passage-3-low-07eb9bd5-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-3-medium-426ee952",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: Kestrel Labs released three versions of its Finch sensor: Finch 1 in 2014, Finch 2 in 2017, and Finch 3 in 2021. Only Finch 2 was waterproof.\n\nQuestion: Which Finch version was waterproof? Answer with the version number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "passage-3-medium-426ee952-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    },
+    {
+      "id": "passage-3-high-e9066498",
+      "requests": [
+        {
+          "contents": [
+            {
+              "parts": [
+                {
+                  "text": "Passage: Kestrel Labs released three versions of its Finch sensor: Finch 1 in 2014, Finch 2 in 2017, and Finch 3 in 2021. Only Finch 2 was waterproof.\n\nQuestion: Which Finch version was waterproof? Answer with the version number only.\nPut only the final answer in the answer field."
+                }
+              ],
+              "role": "CONTENT_ROLE_USER",
+              "senderName": "User"
+            }
+          ],
+          "id": "passage-3-high-e9066498-req-1"
+        }
+      ],
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    }
+  ],
+  "results": [
+    {
+      "type": "AGGREGATED",
+      "dictResult": {
+        "calls": [
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "sched-1",
+            "correct": false,
+            "level": "low",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "D"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "sched-1",
+            "correct": false,
+            "level": "medium",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "D"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "sched-1",
+            "correct": false,
+            "level": "high",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "D"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "sched-2",
+            "correct": false,
+            "level": "low",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "T"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "sched-2",
+            "correct": false,
+            "level": "medium",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "T"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "sched-2",
+            "correct": false,
+            "level": "high",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "T"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "sched-3",
+            "correct": false,
+            "level": "low",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "15"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "sched-3",
+            "correct": false,
+            "level": "medium",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "15"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "sched-3",
+            "correct": false,
+            "level": "high",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "15"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "sched-4",
+            "correct": false,
+            "level": "low",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "3"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "sched-4",
+            "correct": false,
+            "level": "medium",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "3"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "sched-4",
+            "correct": false,
+            "level": "high",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "3"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "arith-1",
+            "correct": false,
+            "level": "low",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "29"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "arith-1",
+            "correct": false,
+            "level": "medium",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "29"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "arith-1",
+            "correct": false,
+            "level": "high",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "29"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "arith-2",
+            "correct": false,
+            "level": "low",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "270"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "arith-2",
+            "correct": false,
+            "level": "medium",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "270"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "arith-2",
+            "correct": false,
+            "level": "high",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "270"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "arith-3",
+            "correct": false,
+            "level": "low",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "135"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "arith-3",
+            "correct": false,
+            "level": "medium",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "135"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "arith-3",
+            "correct": false,
+            "level": "high",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "135"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "passage-1",
+            "correct": false,
+            "level": "low",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "1952"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "passage-1",
+            "correct": false,
+            "level": "medium",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "1952"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "passage-1",
+            "correct": false,
+            "level": "high",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "1952"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "passage-2",
+            "correct": false,
+            "level": "low",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "baker"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "passage-2",
+            "correct": false,
+            "level": "medium",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "baker"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "passage-2",
+            "correct": false,
+            "level": "high",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "baker"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "passage-3",
+            "correct": false,
+            "level": "low",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "2"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "passage-3",
+            "correct": false,
+            "level": "medium",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "2"
+          },
+          {
+            "output_tokens": null,
+            "got": null,
+            "cost_usd": null,
+            "item": "passage-3",
+            "correct": false,
+            "level": "high",
+            "error": "BadRequestError: Error code: 400 - {'code': '', 'message': '{\"code\":\"Client specified an invalid argument\",\"error\":\"This model does not support `reasoning_effort`\"}', 'param': '', 'type': 'invalid_request_error'}",
+            "input_tokens": null,
+            "expected": "2"
+          }
+        ],
+        "summary": {
+          "low": {
+            "accuracy": 0.0,
+            "mean_output_tokens": null,
+            "n_errors": 10.0,
+            "mean_cost_usd": null
+          },
+          "high": {
+            "accuracy": 0.0,
+            "mean_output_tokens": null,
+            "n_errors": 10.0,
+            "mean_cost_usd": null
+          },
+          "medium": {
+            "accuracy": 0.0,
+            "mean_output_tokens": null,
+            "n_errors": 10.0,
+            "mean_cost_usd": null
+          }
+        }
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "expectation": "All 10 calls at reasoning=low succeed",
+      "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+      "lineNumber": 182,
+      "definition": "kbench.assertions.assert_true(",
+      "conversationRequestIds": [
+        {
+          "conversationId": "reasoning-pilot-c9478ccf"
+        }
+      ]
+    },
+    {
+      "expectation": "All 10 calls at reasoning=medium succeed",
+      "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+      "lineNumber": 182,
+      "definition": "kbench.assertions.assert_true(",
+      "conversationRequestIds": [
+        {
+          "conversationId": "reasoning-pilot-c9478ccf"
+        }
+      ]
+    },
+    {
+      "expectation": "All 10 calls at reasoning=high succeed",
+      "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+      "lineNumber": 182,
+      "definition": "kbench.assertions.assert_true(",
+      "conversationRequestIds": [
+        {
+          "conversationId": "reasoning-pilot-c9478ccf"
+        }
+      ]
+    }
+  ],
+  "pyRunId": "reasoning-pilot-Run #1"
+}
