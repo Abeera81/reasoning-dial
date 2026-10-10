@@ -626,26 +626,30 @@ def fig_cost_vs_gain(tests, cost, fig_dir, full, short):
     for m, fam, x, y, lo, hi in rows:
         ax.errorbar(x, y, yerr=[[y - lo], [hi - y]], fmt=FAMILY_MARKER[fam], color=_color(m), ms=11,
                     capsize=4, lw=1.6, mec="black", mew=0.6)
-    # Labels: points near 0 pp crowd together, so stagger their labels up and down
-    # (alternating, growing distance, ordered by x) with thin leader lines.
-    near = sorted([r for r in rows if abs(r[3]) < 4], key=lambda r: r[2])
-    far = [r for r in rows if abs(r[3]) >= 4]
-    for m, fam, x, y, *_ in far:
+    # Label only points off the zero line; summarise the zero-change cluster in one note.
+    zero = [r for r in rows if abs(r[3]) < 1e-9]
+    for m, fam, x, y, *_ in (r for r in rows if abs(r[3]) >= 1e-9):
         ax.annotate(f"{TINY.get(m, _short(m))} · {FAMILY_WORD[fam]}", (x, y), textcoords="offset points",
                     xytext=(10, 6), fontsize=10, color="#222222")
-    for k, (m, fam, x, y, *_) in enumerate(near):
-        dy = (1 if k % 2 == 0 else -1) * (40 + 30 * (k // 2))
-        ax.annotate(f"{TINY.get(m, _short(m))} · {FAMILY_WORD[fam]}", (x, y), textcoords="offset points",
-                    xytext=(0, dy), fontsize=10, color="#222222", ha="center",
-                    va="bottom" if dy > 0 else "top",
-                    arrowprops={"arrowstyle": "-", "color": "#888888", "lw": 0.8})
     ax.axhline(0, color="black", lw=1)
     ax.set_xscale("log")
+    if zero:
+        zx = [r[2] for r in zero]
+        a, b = min(zx), max(zx)
+        ax.plot([a, b], [0, 0], color="#888888", lw=10, alpha=0.25, solid_capstyle="round", zorder=0)
+        ax.annotate(f"{len(zero)} of {len(rows)} cases: accuracy unchanged, cost ×{a:.1f}–×{b:.1f}",
+                    (float(np.sqrt(a * b)), 0), textcoords="offset points", xytext=(0, -48),
+                    ha="center", va="top", fontsize=11, color="#333333",
+                    bbox={"boxstyle": "round,pad=0.3", "fc": "white", "ec": "#bbbbbb"})
     xs = [r[2] for r in rows] or [1, 2]
     ax.set_xlim(min(0.8, min(xs) / 1.3), max(25, max(xs) * 1.6))
     _times_axis(ax)
-    ylim = max(30, max((abs(v) for r in rows for v in r[3:]), default=10) + 8)
-    ax.set_ylim(-ylim, ylim)
+    # y range adapts to every error bar (plus padding); always keeps room around 0 for the note.
+    los = [r[4] for r in rows] or [0]
+    his = [r[5] for r in rows] or [0]
+    lo_v, hi_v = min(min(los), -15), max(max(his), 15)
+    pad = max(5, 0.1 * (hi_v - lo_v))
+    ax.set_ylim(lo_v - pad, hi_v + pad)
     ax.set_xlabel("cost per correct answer at high ÷ at the model's lowest level")
     ax.set_ylabel("accuracy change, percentage points (high − lowest)")
     ax.grid(alpha=0.3)
