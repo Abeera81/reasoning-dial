@@ -664,6 +664,58 @@ def fig_cost_vs_gain(tests, cost, fig_dir, full, short):
     _save(fig, fig_dir, "fig0_cost_vs_gain.png", full, short)
 
 
+def fig_cover(tests, cost, fig_dir):
+    """DEV cover image, exactly 1000x420 px: title, subtitle and a simplified Fig 0."""
+    from matplotlib.lines import Line2D
+    rows = []
+    for r in tests[tests["p"].notna()].itertuples():
+        c = cost[(cost["model"] == r.model) & (cost["family"] == r.family)].set_index("level")
+        if "high" not in c.index or r.baseline not in c.index:
+            continue
+        hi, lo = c.loc["high", "cost_per_correct"], c.loc[r.baseline, "cost_per_correct"]
+        if pd.isna(hi) or pd.isna(lo) or lo <= 0:
+            continue
+        rows.append((r.model, r.family, hi / lo, r.delta * 100))
+
+    with plt.rc_context({"font.size": 13}):
+        fig = plt.figure(figsize=(10, 4.2), dpi=100, facecolor="white")
+        fig.text(0.04, 0.80, "The Reasoning Dial", fontsize=27, fontweight="bold", color="#111111",
+                 va="center")
+        fig.text(0.04, 0.655, "What turning AI reasoning\nup to ‘high’ actually buys", fontsize=15,
+                 color="#444444", va="center", linespacing=1.3)
+        models = [m for m in LINEUP if m in {r[0] for r in rows}]
+        for i, m in enumerate(models):
+            y = 0.44 - i * 0.075
+            fig.text(0.055, y, "●", fontsize=15, color=_color(m), va="center")
+            fig.text(0.085, y, _short(m), fontsize=13, color="#222222", va="center")
+
+        ax = fig.add_axes((0.585, 0.17, 0.39, 0.73))
+        for m, fam, x, y in rows:
+            ax.plot(x, y, marker=FAMILY_MARKER[fam], color=_color(m), ms=13, mec="black", mew=0.6,
+                    ls="", zorder=3)
+        ax.axhline(0, color="#333333", lw=1.2, zorder=1)
+        ax.set_xscale("log")
+        xs = [r[2] for r in rows] or [1, 2]
+        ax.set_xlim(min(0.8, min(xs) / 1.4), max(25, max(xs) * 1.6))
+        _times_axis(ax)
+        ys = [r[3] for r in rows] or [0]
+        span = max(15, max(abs(v) for v in ys) * 1.3)
+        ax.set_ylim(min(-span, min(ys) - 5), max(span, max(ys) + 5))
+        ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:+.0f}" if v else "0"))
+        ax.set_xlabel("cost of a correct answer, high vs lowest", fontsize=12)
+        ax.set_ylabel("accuracy change (points)", fontsize=12)
+        ax.tick_params(labelsize=12)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+        ax.grid(alpha=0.25)
+        shapes = [Line2D([], [], marker=FAMILY_MARKER[f], ls="", color="#bbbbbb", mec="black", ms=10,
+                         label=FAMILY_WORD[f]) for f in FAMILIES]
+        ax.legend(handles=shapes, loc="upper right", fontsize=11, frameon=False, handletextpad=0.2)
+        (fig_dir / "article").mkdir(parents=True, exist_ok=True)
+        fig.savefig(fig_dir / "article" / "cover.png", dpi=100, facecolor="white")
+        plt.close(fig)
+
+
 # ---------------------------------------------------------------- summary
 
 def _f(x, spec=".2f"):
@@ -853,6 +905,7 @@ def run(results_dir: Path, out_csv: Path, out_md: Path, fig_dir: Path, supersede
     per_level = short(f"n = {20 * R} answers per point")
     pooled = short(f"n = {60 * R} answers per point")
     fig_cost_vs_gain(tests, cost, fig_dir, n_text, short("n = 20 questions per point (paired)"))
+    fig_cover(tests, cost, fig_dir)
     fig_dial_curves(acc, fig_dir, n_text, per_level)
     fig_token_ladder(dial, fig_dir, n_text, pooled)
     fig_token_ladder_by_family(explore, fig_dir, n_text, per_level)
