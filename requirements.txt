@@ -1,0 +1,8 @@
+# Pinned to the versions this project was built and analysed with (Python 3.14.4).
+kaggle-benchmarks==0.6.1
+kaggle==2.2.4
+pandas==3.0.2
+numpy==2.4.4
+scipy==1.18.1
+matplotlib==3.11.2
+pytest==9.1.1
