@@ -133,7 +133,11 @@ def test_pipeline_ceiling_superseded_and_quota(tmp_path):
     out = A.run(res, tmp_path / "calls.csv", tmp_path / "summary.md", tmp_path / "figs", sup, reps=200)
 
     assert (tmp_path / "calls.csv").exists() and (tmp_path / "summary.md").exists()
-    assert len(list((tmp_path / "figs").glob("fig*.png"))) == 5
+    names = {"fig0_cost_vs_gain.png", "fig1_dial_curves.png", "fig2_token_ladder.png",
+             "fig2b_token_ladder_by_family.png", "fig3_cost_per_correct.png",
+             "fig4_forest_delta.png", "fig5_format_failures.png"}
+    assert {f.name for f in (tmp_path / "figs").glob("fig*.png")} == names
+    assert {f.name for f in (tmp_path / "figs" / "article").glob("fig*.png")} == names
     comp = out["comp"].set_index("model")
     assert comp.loc["openai/gpt-5.4-mini-2026-03-17", "status"] == "superseded, pending re-run"
     assert comp.loc["anthropic/claude-sonnet-5@default", "status"] == "dropped (platform quota reservation)"

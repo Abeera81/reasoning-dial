@@ -22,6 +22,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.ticker  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from scipy import stats  # noqa: E402
@@ -51,12 +52,14 @@ EXPECTED_LEVELS = {"openai/gpt-oss-120b": ["low", "medium", "high"]}  # others: 
 # docs/PREREGISTRATION.md §10): per-call quota reservation ~$1.28 x 8 parallel > $10/day.
 DROPPED = {"anthropic/claude-sonnet-5@default": "dropped (platform quota reservation)"}
 BASELINE = {"openai/gpt-oss-120b": "low"}                              # others: none
-# Okabe-Ito colorblind-safe palette, one fixed color + marker per model.
+# Okabe-Ito colorblind-safe palette, one fixed color + marker per model. The four
+# lineup models get four well-separated hues (orange, reddish purple, green, blue);
+# gpt-5.4-mini's color is reserved even while its data is pending.
 COLORS = {
     "openai/gpt-oss-120b": "#E69F00",
-    "openai/gpt-5.4-mini-2026-03-17": "#56B4E9",
+    "openai/gpt-5.4-mini-2026-03-17": "#CC79A7",
     "anthropic/claude-haiku-5-5": "#009E73",
-    "anthropic/claude-sonnet-5@default": "#CC79A7",
+    "anthropic/claude-sonnet-5@default": "#999999",
     "google/gemini-3.7-flash": "#0072B2",
 }
 MARKERS = {m: mk for m, mk in zip(LINEUP, ["o", "s", "^", "D", "v"])}
@@ -362,6 +365,20 @@ def noise_table(live: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------- figures
+# Presentation only: nothing below changes a statistic. Every figure is saved twice:
+# analysis/figures/<name> with the full footer, analysis/figures/article/<name> with a
+# one-line footer for the article.
+
+FAMILY_TITLE = {"deduce": "Logic puzzles (Deduce)", "arith": "Arithmetic, control (Arith)",
+                "distract": "Counting with distractors (Distract)"}
+FAMILY_WORD = {"deduce": "logic", "arith": "arithmetic", "distract": "counting"}
+FAMILY_MARKER = {"deduce": "o", "arith": "s", "distract": "^"}
+TINY = {"openai/gpt-oss-120b": "gpt-oss", "openai/gpt-5.4-mini-2026-03-17": "gpt-5.4-mini",
+        "anthropic/claude-haiku-5-5": "haiku-5.5", "google/gemini-3.7-flash": "gemini-3.7-flash",
+        "anthropic/claude-sonnet-5@default": "sonnet-5"}
+# Levels a model cannot run, shown in tables/figures instead of "no data".
+REJECTED_LEVELS = {"openai/gpt-oss-120b": {"none": "rejects ‘none’"}}
+
 
 def _color(m):
     return COLORS.get(m, OTHER_COLOR)
@@ -371,44 +388,99 @@ def _short(m):
     return SHORT.get(m, m)
 
 
-def _footer(fig, text):
-    import textwrap
-    fig.text(0.01, 0.01, "\n".join(textwrap.wrap(text, 190)), fontsize=11, ha="left",
-             va="bottom", color="#333333")
-
-
 def _setup():
     plt.rcParams.update({"font.size": 13, "axes.titlesize": 15, "axes.labelsize": 13,
                          "legend.fontsize": 12, "figure.dpi": 100})
 
 
-def fig_dial_curves(acc: pd.DataFrame, path: Path, n_text: str):
-    fig, axes = plt.subplots(1, 3, figsize=(16, 6), sharey=True)
+def _plot_models(present):
+    return [m for m in LINEUP if m in present]
+
+
+def _token_axis(ax):
+    """Log y axis with plain-number labels: 50, 100, 200, 500, 1,000, ..."""
+    from matplotlib.ticker import FixedLocator, FuncFormatter, NullFormatter, NullLocator
+    lo, hi = ax.get_ylim()
+    ticks = [v for d in range(0, 7) for v in (1 * 10 ** d, 2 * 10 ** d, 5 * 10 ** d) if lo <= v <= hi]
+    ax.yaxis.set_major_locator(FixedLocator(ticks))
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:,.0f}"))
+    ax.yaxis.set_minor_locator(NullLocator())
+    ax.yaxis.set_minor_formatter(NullFormatter())
+
+
+def _cost_axis(ax):
+    """Log y axis with dollar labels at decades: $0.0001, $0.001, $0.01, ..."""
+    from matplotlib.ticker import FixedLocator, FuncFormatter, NullFormatter, NullLocator
+    lo, hi = ax.get_ylim()
+    ticks = [10.0 ** e for e in range(-7, 2) if lo <= 10.0 ** e <= hi]
+    ax.yaxis.set_major_locator(FixedLocator(ticks))
+    ax.yaxis.set_major_formatter(FuncFormatter(
+        lambda v, _: "$" + np.format_float_positional(v, trim="-")))
+    ax.yaxis.set_minor_locator(NullLocator())
+    ax.yaxis.set_minor_formatter(NullFormatter())
+
+
+def _times_axis(ax):
+    """Log x axis labelled ×1, ×2, ×5, ×10, ×20, ..."""
+    from matplotlib.ticker import FixedLocator, FuncFormatter, NullFormatter, NullLocator
+    lo, hi = ax.get_xlim()
+    ticks = [v for v in (0.5, 1, 2, 5, 10, 20, 50, 100, 200) if lo <= v <= hi]
+    ax.xaxis.set_major_locator(FixedLocator(ticks))
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"×{v:g}"))
+    ax.xaxis.set_minor_locator(NullLocator())
+    ax.xaxis.set_minor_formatter(NullFormatter())
+
+
+def _save(fig, fig_dir: Path, name: str, full: str, short: str, rect=(0, 0.06, 1, 0.95)):
+    """Save with the full footer, then an article/ copy with a one-line footer."""
+    import textwrap
+    footer = fig.text(0.01, 0.01, "\n".join(textwrap.wrap(full, 190)), fontsize=11, ha="left",
+                      va="bottom", color="#333333")
+    fig.tight_layout(rect=rect)
+    fig.savefig(fig_dir / name)
+    footer.set_text(short)
+    (fig_dir / "article").mkdir(parents=True, exist_ok=True)
+    fig.savefig(fig_dir / "article" / name)
+    plt.close(fig)
+
+
+def _dodge(models):
+    """x offsets so models sharing a value stay visible side by side."""
+    k = len(models)
+    return {m: (i - (k - 1) / 2) * 0.07 for i, m in enumerate(models)}
+
+
+def fig_dial_curves(acc, fig_dir, full, short):
+    fig, axes = plt.subplots(1, 3, figsize=(16, 6.2), sharey=True)
+    models = _plot_models(set(acc["model"]))
+    off = _dodge(models)
     for ax, fam in zip(axes, FAMILIES):
-        for m in [x for x in LINEUP if x in set(acc["model"])]:
+        for m in models:
             a = acc[(acc["model"] == m) & (acc["family"] == fam)].set_index("level")
             lvls = [lv for lv in LEVELS if lv in a.index]
             if not lvls:
                 continue
-            x = [LEVELS.index(lv) for lv in lvls]
+            x = [LEVELS.index(lv) + off[m] for lv in lvls]
             ax.plot(x, a.loc[lvls, "acc"], marker=MARKERS.get(m, "o"), color=_color(m),
                     label=_short(m), lw=2.2, ms=8)
             ax.fill_between(x, a.loc[lvls, "ci_lo"], a.loc[lvls, "ci_hi"], color=_color(m), alpha=0.15)
-        ax.set_title(f"{fam.capitalize()}: {FAMILY_ROLE[fam]}")
+        ax.set_title(FAMILY_TITLE[fam])
         ax.set_xticks(range(4), LEVELS)
         ax.set_xlabel("reasoning effort")
-        ax.set_ylim(-0.02, 1.05)
+        ax.set_ylim(-0.02, 1.06)
+        ax.yaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1.0, decimals=0))
         ax.grid(alpha=0.3)
-    axes[0].set_ylabel("accuracy (strict)")
+    axes[0].set_ylabel("accuracy")
     axes[-1].legend(loc="lower right")
-    fig.suptitle("Fig 1. Accuracy vs reasoning effort (95% item-cluster bootstrap CI)")
-    _footer(fig, n_text)
-    fig.tight_layout(rect=(0, 0.05, 1, 0.95))
-    fig.savefig(path)
-    plt.close(fig)
+    fig.suptitle("Fig 1. Accuracy at each reasoning-effort level (shaded: 95% confidence interval)")
+    _save(fig, fig_dir, "fig1_dial_curves.png", full, short)
 
 
-def fig_token_ladder(dial: pd.DataFrame, path: Path, n_text: str):
+def _clean_label(label: str) -> str:
+    return "intermediate" if label.startswith("neither") else label
+
+
+def fig_token_ladder(dial, fig_dir, full, short):
     fig, ax = plt.subplots(figsize=(16, 7))
     for _, r in dial.iterrows():
         lvls = [lv for lv in LEVELS if not pd.isna(r[f"med_{lv}"])]
@@ -417,27 +489,48 @@ def fig_token_ladder(dial: pd.DataFrame, path: Path, n_text: str):
         x = [LEVELS.index(lv) for lv in lvls]
         y = [r[f"med_{lv}"] for lv in lvls]
         ax.plot(x, y, marker=MARKERS.get(r["model"], "o"), color=_color(r["model"]), lw=2.2, ms=9,
-                label=f"{_short(r['model'])} ({r['label']})")
-        for xi, yi, lv in zip(x, y, lvls):
-            ax.annotate(f"n={r[f'n_{lv}']}", (xi, yi), textcoords="offset points", xytext=(6, -14),
-                        fontsize=10, color=_color(r["model"]))
+                label=f"{_short(r['model'])}: {_clean_label(r['label'])}")
     ax.set_yscale("log")
+    _token_axis(ax)
     ax.set_xticks(range(4), LEVELS)
     ax.set_xlabel("reasoning effort")
-    ax.set_ylabel("median output tokens (log scale)")
-    ax.grid(alpha=0.3, which="both")
+    ax.set_ylabel("median output tokens per answer")
+    ax.grid(alpha=0.3)
     ax.legend(loc="upper left")
-    fig.suptitle("Fig 2. Token ladder: median output tokens per level, all families pooled")
-    _footer(fig, n_text)
-    fig.tight_layout(rect=(0, 0.05, 1, 0.95))
-    fig.savefig(path)
-    plt.close(fig)
+    fig.suptitle("Fig 2. Median output tokens by dial level (all three task types together)")
+    _save(fig, fig_dir, "fig2_token_ladder.png", full, short)
 
 
-def fig_cost_per_correct(cost: pd.DataFrame, path: Path, n_text: str):
-    fig, axes = plt.subplots(1, 3, figsize=(16, 6), sharey=True)
+def fig_token_ladder_by_family(explore, fig_dir, full, short):
+    fig, axes = plt.subplots(1, 3, figsize=(16, 6.2), sharey=True)
+    models = _plot_models(set(explore["model"]))
     for ax, fam in zip(axes, FAMILIES):
-        for m in [x for x in LINEUP if x in set(cost["model"])]:
+        for m in models:
+            r = explore[(explore["model"] == m) & (explore["family"] == fam)]
+            if r.empty:
+                continue
+            r = r.iloc[0]
+            lvls = [lv for lv in LEVELS if not pd.isna(r[f"med_{lv}"])]
+            ax.plot([LEVELS.index(lv) for lv in lvls], [r[f"med_{lv}"] for lv in lvls],
+                    marker=MARKERS.get(m, "o"), color=_color(m), label=_short(m), lw=2.2, ms=8)
+        ax.set_yscale("log")
+        ax.set_title(FAMILY_TITLE[fam])
+        ax.set_xticks(range(4), LEVELS)
+        ax.set_xlabel("reasoning effort")
+        ax.grid(alpha=0.3)
+    for ax in axes:
+        _token_axis(ax)
+    axes[0].set_ylabel("median output tokens per answer")
+    axes[0].legend(loc="upper left")
+    fig.suptitle("Median output tokens by dial level (exploratory, not pre-registered)")
+    _save(fig, fig_dir, "fig2b_token_ladder_by_family.png", full, short)
+
+
+def fig_cost_per_correct(cost, fig_dir, full, short):
+    fig, axes = plt.subplots(1, 3, figsize=(16, 6.2), sharey=True)
+    models = _plot_models(set(cost["model"]))
+    for ax, fam in zip(axes, FAMILIES):
+        for m in models:
             c = cost[(cost["model"] == m) & (cost["family"] == fam)].set_index("level")
             lvls = [lv for lv in LEVELS if lv in c.index and not pd.isna(c.loc[lv, "cost_per_correct"])]
             if not lvls:
@@ -445,50 +538,49 @@ def fig_cost_per_correct(cost: pd.DataFrame, path: Path, n_text: str):
             ax.plot([LEVELS.index(lv) for lv in lvls], c.loc[lvls, "cost_per_correct"],
                     marker=MARKERS.get(m, "o"), color=_color(m), label=_short(m), lw=2.2, ms=8)
         ax.set_yscale("log")
-        ax.set_title(f"{fam.capitalize()}: {FAMILY_ROLE[fam]}")
+        ax.set_title(FAMILY_TITLE[fam])
         ax.set_xticks(range(4), LEVELS)
         ax.set_xlabel("reasoning effort")
-        ax.grid(alpha=0.3, which="both")
-    axes[0].set_ylabel("USD per correct answer (log scale)")
-    axes[-1].legend(loc="upper left")
-    fig.suptitle("Fig 3. Cost per correct answer vs reasoning effort")
-    _footer(fig, n_text)
-    fig.tight_layout(rect=(0, 0.05, 1, 0.95))
-    fig.savefig(path)
-    plt.close(fig)
+        ax.grid(alpha=0.3)
+    for ax in axes:
+        _cost_axis(ax)
+    axes[0].set_ylabel("cost per correct answer (USD)")
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 0.935),
+               frameon=False)
+    fig.suptitle("Fig 3. Cost per correct answer at each reasoning-effort level")
+    _save(fig, fig_dir, "fig3_cost_per_correct.png", full, short, rect=(0, 0.06, 1, 0.89))
 
 
-def fig_forest(tests: pd.DataFrame, path: Path, n_text: str):
+def fig_forest(tests, fig_dir, full, short):
     t = tests.copy()
-    t["label"] = [f"{_short(m)} | {fam} ({FAMILY_ROLE[fam].split(' ')[0]}) | high - {b}"
+    t["label"] = [f"{_short(m)} · {FAMILY_WORD[fam]} · high − {b}"
                   for m, fam, b in zip(t["model"], t["family"], t["baseline"])]
-    h = max(4, 0.55 * len(t) + 2)
+    h = max(4, 0.55 * len(t) + 2.2)
     fig, ax = plt.subplots(figsize=(16, h))
     for i, r in enumerate(t.itertuples()):
         y = len(t) - 1 - i
         if pd.isna(r.p):
             ax.text(0, y, r.note, va="center", ha="center", fontsize=11, color="#666666")
             continue
-        ax.errorbar(r.delta, y, xerr=[[r.delta - r.ci_lo], [r.ci_hi - r.delta]], fmt=MARKERS.get(r.model, "o"),
-                    color=_color(r.model), ms=9, capsize=5, lw=2)
+        ax.errorbar(r.delta * 100, y, xerr=[[(r.delta - r.ci_lo) * 100], [(r.ci_hi - r.delta) * 100]],
+                    fmt=MARKERS.get(r.model, "o"), color=_color(r.model), ms=9, capsize=5, lw=2)
         tag = r.note or ("effect" if r.effect else "no effect")
-        ax.text(1.02, y, f"{tag}; n={r.n_items} items; Holm p={r.p_holm:.3g}",
+        ax.text(1.02, y, f"{tag}; n={r.n_items} questions; Holm p={r.p_holm:.3g}",
                 va="center", fontsize=10, transform=ax.get_yaxis_transform())
     ax.axvline(0, color="black", lw=1)
     ax.set_yticks(range(len(t)), list(reversed(t["label"].tolist())))
-    span = np.nanmax(np.abs(t[["ci_lo", "ci_hi"]].to_numpy(float))) if t["p"].notna().any() else 0.5
-    ax.set_xlim(-max(0.4, span + 0.1), max(0.4, span + 0.1))
-    ax.set_xlabel("Δ accuracy (high − baseline), paired by item, 95% bootstrap CI")
+    span = np.nanmax(np.abs(t[["ci_lo", "ci_hi"]].to_numpy(float))) * 100 if t["p"].notna().any() else 50
+    lim = max(40, span + 10)
+    ax.set_xlim(-lim, lim)
+    ax.set_xlabel("change in accuracy, percentage points (high − lowest level), 95% CI")
     ax.grid(alpha=0.3, axis="x")
-    fig.suptitle("Fig 4. Effect of turning the dial to high (H2: distract, H3: deduce, H4 control: arith)")
-    _footer(fig, n_text)
-    fig.tight_layout(rect=(0, 0.06, 0.74, 0.96))
-    fig.savefig(path)
-    plt.close(fig)
+    fig.suptitle("Fig 4. Change in accuracy when the dial goes from the lowest level to high")
+    _save(fig, fig_dir, "fig4_forest_delta.png", full, short, rect=(0, 0.07, 0.74, 0.96))
 
 
-def fig_format(acc: pd.DataFrame, path: Path, n_text: str):
-    models = [m for m in LINEUP if m in set(acc["model"])]
+def fig_format(acc, fig_dir, full, short):
+    models = _plot_models(set(acc["model"]))
     agg = acc.groupby(["model", "level"])[["format_fail", "n_calls"]].sum()
     mat = np.full((len(models), 4), np.nan)
     ann = [["" for _ in LEVELS] for _ in models]
@@ -499,10 +591,10 @@ def fig_format(acc: pd.DataFrame, path: Path, n_text: str):
                 mat[i, j] = ff / n
                 ann[i][j] = f"{ff / n:.1%}\n{int(ff)}/{int(n)}"
             else:
-                ann[i][j] = "no data"
-    fig, ax = plt.subplots(figsize=(16, 1.2 * len(models) + 2.5))
-    im = ax.imshow(np.nan_to_num(mat, nan=0), cmap="Greys", vmin=0, vmax=max(0.1, np.nanmax(mat) if np.isfinite(mat).any() else 0.1),
-                   aspect="auto")
+                ann[i][j] = REJECTED_LEVELS.get(m, {}).get(lv, "no data")
+    fig, ax = plt.subplots(figsize=(16, 1.2 * len(models) + 2.6))
+    vmax = max(0.1, np.nanmax(mat)) if np.isfinite(mat).any() else 0.1
+    im = ax.imshow(np.nan_to_num(mat, nan=0), cmap="Greys", vmin=0, vmax=vmax, aspect="auto")
     for i in range(len(models)):
         for j in range(4):
             v = mat[i, j]
@@ -512,12 +604,60 @@ def fig_format(acc: pd.DataFrame, path: Path, n_text: str):
     ax.set_yticks(range(len(models)), [_short(m) for m in models])
     for tick, m in zip(ax.get_yticklabels(), models):
         tick.set_color(_color(m))
-    fig.colorbar(im, ax=ax, label="format-failure rate")
+    fig.colorbar(im, ax=ax, label="share of answers without a usable FINAL ANSWER line",
+                 format=matplotlib.ticker.PercentFormatter(1.0, decimals=0))
     fig.suptitle("Fig 5. Format failures (no parseable FINAL ANSWER line) by model and level")
-    _footer(fig, n_text)
-    fig.tight_layout(rect=(0, 0.06, 1, 0.94))
-    fig.savefig(path)
-    plt.close(fig)
+    _save(fig, fig_dir, "fig5_format_failures.png", full, short, rect=(0, 0.07, 1, 0.94))
+
+
+def fig_cost_vs_gain(tests, cost, fig_dir, full, short):
+    """Headline: cost multiplier (high ÷ lowest level) vs accuracy change, per model × family."""
+    rows = []
+    for r in tests[tests["p"].notna()].itertuples():
+        c = cost[(cost["model"] == r.model) & (cost["family"] == r.family)].set_index("level")
+        if "high" not in c.index or r.baseline not in c.index:
+            continue
+        hi, lo = c.loc["high", "cost_per_correct"], c.loc[r.baseline, "cost_per_correct"]
+        if pd.isna(hi) or pd.isna(lo) or lo <= 0:
+            continue
+        rows.append((r.model, r.family, hi / lo, r.delta * 100, r.ci_lo * 100, r.ci_hi * 100))
+    fig, ax = plt.subplots(figsize=(16, 8))
+    from matplotlib.lines import Line2D
+    for m, fam, x, y, lo, hi in rows:
+        ax.errorbar(x, y, yerr=[[y - lo], [hi - y]], fmt=FAMILY_MARKER[fam], color=_color(m), ms=11,
+                    capsize=4, lw=1.6, mec="black", mew=0.6)
+    # Labels: points near 0 pp crowd together, so stagger their labels up and down
+    # (alternating, growing distance, ordered by x) with thin leader lines.
+    near = sorted([r for r in rows if abs(r[3]) < 4], key=lambda r: r[2])
+    far = [r for r in rows if abs(r[3]) >= 4]
+    for m, fam, x, y, *_ in far:
+        ax.annotate(f"{TINY.get(m, _short(m))} · {FAMILY_WORD[fam]}", (x, y), textcoords="offset points",
+                    xytext=(10, 6), fontsize=10, color="#222222")
+    for k, (m, fam, x, y, *_) in enumerate(near):
+        dy = (1 if k % 2 == 0 else -1) * (40 + 30 * (k // 2))
+        ax.annotate(f"{TINY.get(m, _short(m))} · {FAMILY_WORD[fam]}", (x, y), textcoords="offset points",
+                    xytext=(0, dy), fontsize=10, color="#222222", ha="center",
+                    va="bottom" if dy > 0 else "top",
+                    arrowprops={"arrowstyle": "-", "color": "#888888", "lw": 0.8})
+    ax.axhline(0, color="black", lw=1)
+    ax.set_xscale("log")
+    xs = [r[2] for r in rows] or [1, 2]
+    ax.set_xlim(min(0.8, min(xs) / 1.3), max(25, max(xs) * 1.6))
+    _times_axis(ax)
+    ylim = max(30, max((abs(v) for r in rows for v in r[3:]), default=10) + 8)
+    ax.set_ylim(-ylim, ylim)
+    ax.set_xlabel("cost per correct answer at high ÷ at the model's lowest level")
+    ax.set_ylabel("accuracy change, percentage points (high − lowest)")
+    ax.grid(alpha=0.3)
+    models = [m for m in LINEUP if m in {r[0] for r in rows}]
+    h_models = [Line2D([], [], marker="o", ls="", color=_color(m), ms=10, label=_short(m)) for m in models]
+    h_fams = [Line2D([], [], marker=FAMILY_MARKER[f], ls="", color="#777777", mec="black", ms=10,
+                     label=FAMILY_TITLE[f]) for f in FAMILIES]
+    leg1 = ax.legend(handles=h_models, title="model (color)", loc="upper left")
+    ax.add_artist(leg1)
+    ax.legend(handles=h_fams, title="task type (shape)", loc="lower left")
+    fig.suptitle("What turning the reasoning dial to ‘high’ bought")
+    _save(fig, fig_dir, "fig0_cost_vs_gain.png", full, short)
 
 
 # ---------------------------------------------------------------- summary
@@ -692,16 +832,29 @@ def run(results_dir: Path, out_csv: Path, out_md: Path, fig_dir: Path, supersede
     explore = explore_tokens(live)
 
     reps_used = sorted(live["repeat"].unique().tolist())
+    R = len(reps_used)
     pending = [f"{_short(r.model)} ({r.status})" for r in comp.itertuples() if r.status != "complete"]
-    n_text = (f"n per point: 20 items × {len(reps_used)} repeats = up to {20 * len(reps_used)} calls "
+    n_text = (f"n per point: 20 items × {R} repeats = up to {20 * R} calls "
               f"per model × family × level (exact n in results/summary.md). Excluded: "
               f"{len(superseded)} superseded runs; quota refusals are missing data. "
               f"Not shown: {', '.join(pending) or 'none'}.")
-    fig_dial_curves(acc, fig_dir / "fig1_dial_curves.png", n_text)
-    fig_token_ladder(dial, fig_dir / "fig2_token_ladder.png", n_text)
-    fig_cost_per_correct(cost, fig_dir / "fig3_cost_per_correct.png", n_text)
-    fig_forest(tests, fig_dir / "fig4_forest_delta.png", n_text)
-    fig_format(acc, fig_dir / "fig5_format_failures.png", n_text)
+    n_lineup = len([m for m in LINEUP if m not in DROPPED])
+    waiting = [_short(r.model) for r in comp.itertuples()
+               if r.status != "complete" and r.model not in DROPPED]
+    tail = f" ({', '.join(waiting)} pending)" if waiting else ""
+
+    def short(n_point: str) -> str:
+        return f"{n_point} · {n_lineup} models{tail}, 20 questions × {R} repeats per level"
+
+    per_level = short(f"n = {20 * R} answers per point")
+    pooled = short(f"n = {60 * R} answers per point")
+    fig_cost_vs_gain(tests, cost, fig_dir, n_text, short("n = 20 questions per point (paired)"))
+    fig_dial_curves(acc, fig_dir, n_text, per_level)
+    fig_token_ladder(dial, fig_dir, n_text, pooled)
+    fig_token_ladder_by_family(explore, fig_dir, n_text, per_level)
+    fig_cost_per_correct(cost, fig_dir, n_text, per_level)
+    fig_forest(tests, fig_dir, n_text, short("n = 20 questions per row (paired)"))
+    fig_format(acc, fig_dir, n_text, short(f"n = {60 * R} answers per cell"))
     write_summary(out_md, n_files=len(files), superseded=superseded, hash_ok=hash_ok, comp=comp,
                   acc=acc, tests=tests, dial=dial, cost=cost, noise=noise, explore=explore)
     return {"calls": df, "acc": acc, "tests": tests, "dial": dial, "cost": cost, "noise": noise,
