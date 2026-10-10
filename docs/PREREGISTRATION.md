@@ -115,3 +115,9 @@ Everything below was observed on calibration or pilot items before the test set 
 10. **Lineup:** gemini-3.1-pro-preview and gemini-3.8-flash dropped; gemini-3.7-flash included via push validation runs; gpt-oss-120b runs low/medium/high with high − low as its primary comparison.
 11. **Temperature** is not set (not possible on Kaggle); `google/*` models also drop `seed`.
 12. **Tooling:** `kaggle b t push` on Windows needs `PYTHONUTF8=1`; `analysis/calibration_report.py` added for calibration summaries.
+
+### Amendments after lock (dated; the locked items, prompt, parser and analysis rules are unchanged)
+
+13. **2026-10-10 — claude-sonnet-5-default dropped from the main run** (decided after the lock, before any Sonnet main-run data existed). Reason: Kaggle reserves, per call, the input cost plus 128K output tokens × the output price (≈ $1.28 for claude-sonnet-5 at $10/M output); the dial tasks run 8 calls in parallel (≈ $10.24 reserved), which exceeds the $10 daily quota, and fixing it would require editing the locked task files and re-pushing. **Final lineup:** gpt-oss-120b (low/medium/high), gpt-5.4-mini-2026-03-17, claude-haiku-5-5, gemini-3.7-flash. `analysis/analyze.py` reports Sonnet as "dropped (platform quota reservation)".
+14. **2026-10-10 — gpt-5.4-mini-2026-03-17 partial runs superseded.** 378/480 calls were refused by Kaggle's quota reservation (HTTP 403); those runs are excluded (`results/superseded.json`) and all 4 levels will be re-run. Quota 403s are missing data, never "rejects".
+15. **2026-10-10 — reporting additions (no change to pre-registered statistics or labels):** a second independence check in the noise floor (repeat pairs with identical output-token counts) and an exploratory per-family token table, both marked in `results/summary.md`.

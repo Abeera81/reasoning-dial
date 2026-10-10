@@ -136,7 +136,7 @@ def test_pipeline_ceiling_superseded_and_quota(tmp_path):
     assert len(list((tmp_path / "figs").glob("fig*.png"))) == 5
     comp = out["comp"].set_index("model")
     assert comp.loc["openai/gpt-5.4-mini-2026-03-17", "status"] == "superseded, pending re-run"
-    assert comp.loc["anthropic/claude-sonnet-5@default", "status"] == "not run yet"
+    assert comp.loc["anthropic/claude-sonnet-5@default", "status"] == "dropped (platform quota reservation)"
     assert comp.loc["openai/gpt-oss-120b", "missing_quota"] == 1
     tests = out["tests"]
     haiku = tests[tests["model"] == "anthropic/claude-haiku-5-5"]
@@ -148,5 +148,13 @@ def test_pipeline_ceiling_superseded_and_quota(tmp_path):
     assert dial.loc["anthropic/claude-haiku-5-5", "label"] == "honors"
     assert "none~low" in dial.loc["anthropic/claude-haiku-5-5", "collapsed"]
     assert dial.loc["openai/gpt-oss-120b", "rejects"] == "-"         # quota 403 is not a rejection
+    noise = out["noise"].set_index(["model", "family", "level"])
+    h = noise.loc[("anthropic/claude-haiku-5-5", "deduce", "none")]
+    assert h["token_pairs"] == 4 and h["identical_output_tokens"] == 4   # synthetic: equal tokens
+    assert h["byte_identical_repeats"] == 0                              # synthetic raws differ
+    ex = out["explore"].set_index(["model", "family"])
+    assert ex.loc[("anthropic/claude-haiku-5-5", "arith"), "med_high"] == 300
     summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    assert "Exploratory (not pre-registered)" in summary
+    assert "dropped (platform quota reservation)" in summary
     assert "no difference (ceiling)" in summary and "superseded" in summary
