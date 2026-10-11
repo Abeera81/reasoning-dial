@@ -2,7 +2,7 @@
 
 Reasoning Dial is a Kaggle benchmark about one setting developers choose blind: **reasoning effort** (`none` / `low` / `medium` / `high`). It holds everything else fixed (same items, same prompt, same grader) and measures what turning the dial actually changes: accuracy, output tokens, and cost per correct answer, on three kinds of task. It also asks whether the dial is even the same instrument across vendors.
 
-- Kaggle benchmark: [KAGGLE_BENCHMARK_URL]
+- Kaggle benchmark: https://www.kaggle.com/benchmarks/abeeralodhi/reasoning-dial
 - Kaggle tasks (public): [dial-none](https://www.kaggle.com/benchmarks/tasks/abeeralodhi/dial-none/1) · [dial-low](https://www.kaggle.com/benchmarks/tasks/abeeralodhi/dial-low/1) · [dial-medium](https://www.kaggle.com/benchmarks/tasks/abeeralodhi/dial-medium/1) · [dial-high](https://www.kaggle.com/benchmarks/tasks/abeeralodhi/dial-high/1)
 - Source: https://github.com/Abeera81/reasoning-dial
 - Pre-registration (hypotheses, analysis plan, deviations): [`docs/PREREGISTRATION.md`](docs/PREREGISTRATION.md)
