@@ -48,7 +48,7 @@ SHORT = {
     "google/gemini-3.7-flash": "gemini-3.7-flash",
 }
 EXPECTED_LEVELS = {"openai/gpt-oss-120b": ["low", "medium", "high"]}  # others: all 4
-# Dropped after the lock, before any main-run data existed (logged in MEMORY.md and
+# Dropped after the lock, before any main-run data existed (logged in
 # docs/PREREGISTRATION.md §10): per-call quota reservation ~$1.28 x 8 parallel > $10/day.
 DROPPED = {"anthropic/claude-sonnet-5@default": "dropped (platform quota reservation)"}
 BASELINE = {"openai/gpt-oss-120b": "low"}                              # others: none

@@ -67,7 +67,7 @@ Expected SHA-256: `90dd54981bb26f5c8a90ac7b61e86ac373e853e696d0833090d0483709790
 PYTHONPATH=src python -m dial.build_tasks   # writes tasks/dial_*.py with items + parser inlined
 ```
 
-Running tasks on Kaggle needs a Kaggle account and spends Kaggle AI quota; see `AGENTS.md` for the platform gotchas (UTF-8 mode for `kaggle b t push` on Windows, the hourly model-proxy key, quota reservations).
+Running tasks on Kaggle needs a Kaggle account and spends Kaggle AI quota. Platform gotchas: UTF-8 mode for `kaggle b t push` on Windows, the hourly model-proxy key, quota reservations.
 
 ## Folder map
 
@@ -75,9 +75,6 @@ Running tasks on Kaggle needs a Kaggle account and spends Kaggle AI quota; see `
 README.md, LICENSE, requirements.txt
 docs/
   PREREGISTRATION.md        hypotheses, locked design, analysis plan, deviations/amendments
-  PRD-ReasoningDial-MVP.md  product requirements
-  TechDesign-ReasoningDial-MVP.md   technical design and milestones
-  research-ReasoningDial.md background research and prior work
 src/dial/
   generate.py               seeded generators: deduce, arith, distract
   parse.py                  answer parser (inlined verbatim into every task file)
@@ -97,7 +94,7 @@ results/
   superseded.json           run files excluded from analysis, with reasons
 tests/                      pytest suite
 pilot/                      the original feasibility pilot (code + run files), read-only
-AGENTS.md, CLAUDE.md, MEMORY.md, REVIEW-CHECKLIST.md, agent_docs/   working notes for AI coding agents
+REVIEW-CHECKLIST.md         working notes for AI coding agents
 kaggle_benchmarks_reference.md   kaggle-benchmarks syntax notes
 ```
 

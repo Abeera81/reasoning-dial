@@ -13,7 +13,7 @@ Do not mark work complete until the relevant checks pass.
 ## Validity Checks
 
 - [ ] `data/test_items.json` unchanged since the lock (`git diff data/` clean; SHA-256 matches `data/test_items.sha256`).
-- [ ] Prompt suffix, parser rules and analysis rules unchanged since the lock, or the change is logged in `MEMORY.md`.
+- [ ] Prompt suffix, parser rules and analysis rules unchanged since the lock, or the change is logged with date and reason in `docs/PREREGISTRATION.md` §10.
 - [ ] Every item's answer is computed by code and verified independently in tests.
 - [ ] All four dial task files are identical except the `LEVEL` line (`tests/test_build.py`).
 - [ ] No LLM judge; grading is deterministic.
@@ -24,7 +24,7 @@ Do not mark work complete until the relevant checks pass.
 ## Budget Checks
 
 - [ ] Projected spend checked against §7 before any approved run; quota page checked before each batch.
-- [ ] Actual quota used recorded in `MEMORY.md`.
+- [ ] Actual quota used recorded.
 
 ## Security
 

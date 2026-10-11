@@ -1,7 +1,7 @@
 # Pre-registration — Reasoning Dial
 
 **Date:** 2026-10-10 (Asia/Karachi). Written and committed **before** any main-run task was pushed or run.
-**Source of truth for the analysis.** Any later change to the prompt suffix, parser rules or analysis rules is logged with date and reason in `MEMORY.md` and disclosed in the article.
+**Source of truth for the analysis.** Any later change to the prompt suffix, parser rules or analysis rules is logged with date and reason in §10 below and disclosed in the article.
 
 ## 1. Locked test set
 
