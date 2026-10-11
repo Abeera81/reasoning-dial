@@ -465,6 +465,11 @@ def fig_dial_curves(acc, fig_dir, full, short):
                     label=_short(m), lw=2.2, ms=8)
             ax.fill_between(x, a.loc[lvls, "ci_lo"], a.loc[lvls, "ci_hi"], color=_color(m), alpha=0.15)
         ax.set_title(FAMILY_TITLE[fam])
+        if fam == "deduce":
+            # Deduce answers are one of 7 names, so blind guessing scores 1/7.
+            ax.axhline(1 / 7, color="#888888", ls="--", lw=1.4, zorder=0)
+            ax.text(3.15, 1 / 7 + 0.02, "random guess (1 in 7 names)", ha="right", va="bottom",
+                    fontsize=11, color="#555555")
         ax.set_xticks(range(4), LEVELS)
         ax.set_xlabel("reasoning effort")
         ax.set_ylim(-0.02, 1.06)
@@ -717,7 +722,7 @@ def fig_cover(tests, cost, fig_dir):
         hi, lo = c.loc["high", "cost_per_correct"], c.loc[r.baseline, "cost_per_correct"]
         if pd.isna(hi) or pd.isna(lo) or lo <= 0:
             continue
-        rows.append((r.model, r.family, hi / lo, r.delta * 100))
+        rows.append((r.model, r.family, hi / lo, r.delta * 100, r.acc_base, r.acc_high))
 
     with plt.rc_context({"font.size": 13}):
         fig = plt.figure(figsize=(10, 4.2), dpi=100, facecolor="white")
@@ -725,14 +730,16 @@ def fig_cover(tests, cost, fig_dir):
                  va="center")
         fig.text(0.04, 0.655, "What turning AI reasoning\nup to ‘high’ actually buys", fontsize=15,
                  color="#444444", va="center", linespacing=1.3)
+        fig.text(0.04, 0.485, "Sometimes essential.\nUsually just a bigger bill.", fontsize=14,
+                 fontweight="bold", fontstyle="italic", color="#1a1a1a", va="center", linespacing=1.3)
         models = [m for m in LINEUP if m in {r[0] for r in rows}]
         for i, m in enumerate(models):
-            y = 0.44 - i * 0.075
+            y = 0.345 - i * 0.07
             fig.text(0.055, y, "●", fontsize=15, color=_color(m), va="center")
             fig.text(0.085, y, _short(m), fontsize=13, color="#222222", va="center")
 
         ax = fig.add_axes((0.585, 0.17, 0.39, 0.73))
-        for m, fam, x, y in rows:
+        for m, fam, x, y, *_ in rows:
             ax.plot(x, y, marker=FAMILY_MARKER[fam], color=_color(m), ms=13, mec="black", mew=0.6,
                     ls="", zorder=3)
         ax.axhline(0, color="#333333", lw=1.2, zorder=1)
@@ -741,8 +748,13 @@ def fig_cover(tests, cost, fig_dir):
         ax.set_xlim(min(0.8, min(xs) / 1.4), max(25, max(xs) * 1.6))
         _times_axis(ax)
         ys = [r[3] for r in rows] or [0]
-        span = max(15, max(abs(v) for v in ys) * 1.3)
-        ax.set_ylim(min(-span, min(ys) - 5), max(span, max(ys) + 5))
+        ax.set_ylim(min(-25, min(ys) - 10), max(100, max(ys) + 10))
+        if rows:
+            m, fam, x, y, a0, a1 = max(rows, key=lambda r: r[3])
+            pct = lambda v: f"{v * 100:.1f}".rstrip("0").rstrip(".") + "%"  # 0.975 -> 97.5%, 0.15 -> 15%
+            ax.annotate(f"{_short(m)} · {FAMILY_WORD[fam]}\n{pct(a0)} → {pct(a1)}", (x, y),
+                        textcoords="offset points", xytext=(-14, 0), ha="right", va="center",
+                        fontsize=12, color="#111111", linespacing=1.2)
         ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:+.0f}" if v else "0"))
         ax.set_xlabel("cost of a correct answer, high vs lowest", fontsize=12)
         ax.set_ylabel("accuracy change (points)", fontsize=12)
