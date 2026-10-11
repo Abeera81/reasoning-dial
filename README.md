@@ -5,7 +5,7 @@ Reasoning Dial is a Kaggle benchmark about one setting developers choose blind: 
 - Kaggle benchmark: https://www.kaggle.com/benchmarks/abeeralodhi/reasoning-dial
 - Kaggle tasks (public): [dial-none](https://www.kaggle.com/benchmarks/tasks/abeeralodhi/dial-none/1) · [dial-low](https://www.kaggle.com/benchmarks/tasks/abeeralodhi/dial-low/1) · [dial-medium](https://www.kaggle.com/benchmarks/tasks/abeeralodhi/dial-medium/1) · [dial-high](https://www.kaggle.com/benchmarks/tasks/abeeralodhi/dial-high/1)
 - Source: https://github.com/Abeera81/reasoning-dial
-- Pre-registration (hypotheses, analysis plan, deviations): [`docs/PREREGISTRATION.md`](docs/PREREGISTRATION.md)
+- Pre-registration (hypotheses, analysis plan, deviations): [`docs/PREREGISTRATION.md`](https://github.com/Abeera81/reasoning-dial/blob/main/docs/PREREGISTRATION.md)
 
 ## Design
 
