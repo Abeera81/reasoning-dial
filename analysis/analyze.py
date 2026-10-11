@@ -75,8 +75,8 @@ CHOICES = [
     "Wilcoxon signed-rank uses zero_method='zsplit' (zero differences stay in the ranking, "
     "split between signs), two-sided. This is more conservative than discarding zeros.",
     "The Holm family is every computed model x family test, Arith included, and tests at "
-    "ceiling count with p = 1. Models without complete data are not tested; adding them "
-    "later enlarges the Holm family, so current adjusted p-values are provisional.",
+    "ceiling count with p = 1. Models without complete data are not tested and do not enter "
+    "the Holm family; its size m is stated in the header.",
     "Accuracy and the paired difference use only graded calls (correct / wrong / "
     "format_fail). Items with no graded call at a level are dropped from that pair.",
     "Dial labels pool all three families. 'collapsed levels': |median(b) - median(a)| <= "
@@ -610,6 +610,46 @@ def fig_format(acc, fig_dir, full, short):
     _save(fig, fig_dir, "fig5_format_failures.png", full, short, rect=(0, 0.07, 1, 0.94))
 
 
+def _place_note(fig, ax, anchor, text, bars, legends):
+    """Semi-transparent note for the zero-change cluster, placed where it overlaps no error bar.
+
+    `bars` are (x, y, lo, hi) in data units. Tries offsets below/above the anchor, then free spots
+    along the axes edges; keeps the first box inside the axes that touches no error bar (incl. caps
+    and marker) and no legend. Falls back to the least-overlapping candidate.
+    """
+    from matplotlib.transforms import Bbox
+    renderer = fig.canvas.get_renderer()
+    to_px = ax.transData.transform
+    obstacles = []
+    for x, y, lo, hi in bars:
+        (x0, y0), (x1, y1) = to_px([(x, lo), (x, hi)])
+        obstacles.append(Bbox([[x0 - 10, y0 - 10], [x1 + 10, y1 + 10]]))
+    obstacles += [lg.get_window_extent(renderer).padded(4) for lg in legends]
+    axbox = ax.get_window_extent(renderer)
+    style = {"fontsize": 11, "color": "#333333", "zorder": 5,
+             "bbox": {"boxstyle": "round,pad=0.3", "fc": "white", "ec": "#bbbbbb", "alpha": 0.7}}
+    candidates = [dict(xy=anchor, textcoords="offset points", xytext=(0, dy), ha="center",
+                       va="top" if dy < 0 else "bottom") for dy in (-48, -90, 48, 90)]
+    candidates += [dict(xy=(fx, fy), xycoords="axes fraction", ha="center", va=va)
+                   for fy, va in ((0.03, "bottom"), (0.97, "top")) for fx in (0.5, 0.35, 0.65, 0.8)]
+    best = None
+    for kw in candidates:
+        note = ax.annotate(text, **kw, **style)
+        box = note.get_window_extent(renderer).padded(2)
+        hits = sum(box.overlaps(o) for o in obstacles)
+        inside = axbox.x0 <= box.x0 and box.x1 <= axbox.x1 and axbox.y0 <= box.y0 and box.y1 <= axbox.y1
+        score = hits + (0 if inside else 100)
+        if best is None or score < best[0]:
+            if best is not None:
+                best[1].remove()
+            best = (score, note)
+        else:
+            note.remove()
+        if score == 0:
+            break
+    return best[1]
+
+
 def fig_cost_vs_gain(tests, cost, fig_dir, full, short):
     """Headline: cost multiplier (high ÷ lowest level) vs accuracy change, per model × family."""
     rows = []
@@ -633,14 +673,13 @@ def fig_cost_vs_gain(tests, cost, fig_dir, full, short):
                     xytext=(10, 6), fontsize=10, color="#222222")
     ax.axhline(0, color="black", lw=1)
     ax.set_xscale("log")
+    zero_note = None
     if zero:
         zx = [r[2] for r in zero]
         a, b = min(zx), max(zx)
         ax.plot([a, b], [0, 0], color="#888888", lw=10, alpha=0.25, solid_capstyle="round", zorder=0)
-        ax.annotate(f"{len(zero)} of {len(rows)} cases: accuracy unchanged, cost ×{a:.1f}–×{b:.1f}",
-                    (float(np.sqrt(a * b)), 0), textcoords="offset points", xytext=(0, -48),
-                    ha="center", va="top", fontsize=11, color="#333333",
-                    bbox={"boxstyle": "round,pad=0.3", "fc": "white", "ec": "#bbbbbb"})
+        zero_note = ((float(np.sqrt(a * b)), 0),
+                     f"{len(zero)} of {len(rows)} cases: accuracy unchanged, cost ×{a:.1f}–×{b:.1f}")
     xs = [r[2] for r in rows] or [1, 2]
     ax.set_xlim(min(0.8, min(xs) / 1.3), max(25, max(xs) * 1.6))
     _times_axis(ax)
@@ -659,8 +698,11 @@ def fig_cost_vs_gain(tests, cost, fig_dir, full, short):
                      label=FAMILY_TITLE[f]) for f in FAMILIES]
     leg1 = ax.legend(handles=h_models, title="model (color)", loc="upper left")
     ax.add_artist(leg1)
-    ax.legend(handles=h_fams, title="task type (shape)", loc="lower left")
+    leg2 = ax.legend(handles=h_fams, title="task type (shape)", loc="lower left")
     fig.suptitle("What turning the reasoning dial to ‘high’ bought")
+    if zero_note:
+        fig.tight_layout(rect=(0, 0.06, 1, 0.95))  # same rect as _save, so positions are final
+        _place_note(fig, ax, *zero_note, bars=[r[2:] for r in rows], legends=[leg1, leg2])
     _save(fig, fig_dir, "fig0_cost_vs_gain.png", full, short)
 
 
